@@ -12,6 +12,12 @@ export interface LotState {
   realizedProceeds: number;
   realizedGainLoss: number;
   originalCostBasis: number;
+  sales: Array<{
+    sellTransactionId: string;
+    sellDate: string;
+    quantity: number;
+    proceeds: number;
+  }>;
 }
 
 /**
@@ -43,6 +49,7 @@ export function buildFifoLots(transactions: LedgerTransaction[]): LotState[] {
           realizedProceeds: 0,
           realizedGainLoss: 0,
           originalCostBasis: amount + fee,
+          sales: [],
         });
       }
 
@@ -79,6 +86,12 @@ export function buildFifoLots(transactions: LedgerTransaction[]): LotState[] {
           lot.costBasis -= basisSold;
           lot.realizedProceeds += proceedsSold;
           lot.realizedGainLoss += proceedsSold - basisSold;
+          lot.sales.push({
+            sellTransactionId: tx.id,
+            sellDate: tx.tradeDate,
+            quantity: soldFromLot,
+            proceeds: proceedsSold,
+          });
           remainingToSell -= soldFromLot;
 
           if (Math.abs(lot.remainingQuantity) < 1e-9) {
