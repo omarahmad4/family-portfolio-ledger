@@ -46,6 +46,19 @@ export function buildFifoLots(transactions: LedgerTransaction[]): LotState[] {
         });
       }
 
+      if (tx.type === 'SPLIT') {
+        const splitRatio = tx.quantity;
+        if (splitRatio && splitRatio > 0) {
+          const ownerLots = lots.filter(
+            (lot) => lot.ownerId === allocation.ownerId && lot.assetId === tx.assetId && lot.remainingQuantity > 1e-9
+          );
+          for (const lot of ownerLots) {
+            lot.originalQuantity *= splitRatio;
+            lot.remainingQuantity *= splitRatio;
+          }
+        }
+      }
+
       if ((tx.type === 'SELL' || tx.type === 'TRANSFER_OUT') && quantity > 0) {
         let remainingToSell = quantity;
         const proceeds = amount - fee;
