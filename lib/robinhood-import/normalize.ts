@@ -64,15 +64,22 @@ export function normalizeRobinhoodRow(raw: unknown, options: NormalizeRobinhoodR
 
   if (!tradeDate) return null;
 
+  let isoDate: string;
+  try {
+    isoDate = new Date(tradeDate).toISOString();
+  } catch {
+    return null;
+  }
+
   const asset = symbol ? options.assetLookup(symbol) : undefined;
   const type = inferType(rawType, quantity);
   const absoluteQuantity = quantity == null ? undefined : Math.abs(quantity);
   const grossAmount = amount || (absoluteQuantity && price ? absoluteQuantity * price : 0);
 
   return {
-    id: `import:${tradeDate}:${symbol ?? 'cash'}:${rawType ?? 'unknown'}:${grossAmount}`,
+    id: `import:${isoDate}:${symbol ?? 'cash'}:${rawType ?? 'unknown'}:${grossAmount}`,
     type,
-    tradeDate: new Date(tradeDate).toISOString(),
+    tradeDate: isoDate,
     assetId: asset?.id,
     quantity: absoluteQuantity,
     price: price || undefined,
