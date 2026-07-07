@@ -1,0 +1,61 @@
+import { TransactionType } from '@prisma/client';
+import { revalidatePath } from 'next/cache';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { prisma } from '@/lib/db/prisma';
+
+const allocationSchema = z.object({
+  ownerId: z.string().min(1),
+  percentage: z.coerce.number().min(0).max(1),
+});
+
+const createTransactionSchema = z.object({
+  accountId: z.string().min(1),
+  assetId: z.string().min(1).optional().nullable(),
+  type: z.nativeEnum(TransactionType),
+  tradeDate: z.string().min(1),
+  quantity: z.coerce.number().optional().nullable(),
+  price: z.coerce.number().optional().nullable(),
+  grossAmount: z.coerce.number().positive(),
+  fee: z.coerce.number().min(0).default(0),
+  notes: z.string().optional().nullable(),
+  allocations: z.array(allocationSchema).min(1),
+});
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const input = createTransactionSchema.parse(body);
+  const totalPct = input.allocations.reduce((sum, row) => sum + row.percentage, 0);
+  if (Math.abs(totalPct - 1) > 0.000001) {
+    return NextResponse.json({ error: 'Allocations must add up to 100%.' }, { status: 400 });
+  }
+
+  const tx = await prisma.transaction.create({
+    data: {
+      accountId: input.accountId,
+      assetId: input.assetId || null,
+      type: input.type,
+      tradeDate: new Date(input.tradeDate),
+      quantity: input.quantity ?? null,
+      price: input.price ?? null,
+      grossAmount: Math.abs(input.grossAmount),
+      fee: input.fee,
+      notes: input.notes,
+      allocations: {
+        create: input.allocations.map((allocation) => ({
+          ownerId: allocation.ownerId,
+          percentage: allocation.percentage,
+          amount: Math.abs(input.grossAmount) * allocation.percentage,
+          quantity: input.quantity == null ? null : Math.abs(input.quantity) * allocation.percentage,
+        })),
+      },
+    },
+  });
+
+  revalidatePath('/dashboard');
+  revalidatePath('/transactions');
+  revalidatePath('/holdings');
+  revalidatePath('/decisions');
+
+  return NextResponse.json({ id: tx.id });
+}

@@ -1,0 +1,41 @@
+{
+  "name": "family-portfolio-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.2.1",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "latest",
+    "zod": "latest",
+    "papaparse": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/papaparse": "latest",
+    "prisma": "^6.2.1",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.15"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum AssetType {
+  STOCK
+  ETF
+  CRYPTO
+  CASH
+}
+
+enum TransactionType {
+  BUY
+  SELL
+  DIVIDEND
+  DEPOSIT
+  WITHDRAWAL
+  FEE
+  SPLIT
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum BenchmarkType {
+  SPY
+  QQQ
+  BTC
+  ETH
+  CASH
+  PORTFOLIO
+}
+
+model Owner {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  allocations TransactionAllocation[]
+  lots        Lot[]
+}
+
+model Account {
+  id          String   @id @default(cuid())
+  name        String
+  institution String   @default("Robinhood")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions Transaction[]
+}
+
+model Asset {
+  id        String    @id @default(cuid())
+  symbol    String
+  name      String
+  type      AssetType
+  currency  String    @default("USD")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  transactions Transaction[]
+  lots         Lot[]
+  prices       Price[]
+
+  @@unique([symbol, type])
+}
+
+model Transaction {
+  id              String          @id @default(cuid())
+  accountId       String
+  assetId         String?
+  type            TransactionType
+  tradeDate       DateTime
+  quantity        Decimal?
+  price           Decimal?
+  grossAmount     Decimal
+  fee             Decimal         @default(0)
+  notes           String?
+  externalId      String?         @unique
+  importBatchId   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  account     Account @relation(fields: [accountId], references: [id])
+  asset       Asset?  @relation(fields: [assetId], references: [id])
+  allocations TransactionAllocation[]
+  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  @@index([tradeDate])
+  @@index([assetId])
+}
+
+model TransactionAllocation {
+  id            String   @id @default(cuid())
+  transactionId String
+  ownerId       String
+  percentage    Decimal
+  amount        Decimal
+  quantity      Decimal?
+  createdAt     DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  owner       Owner       @relation(fields: [ownerId], references: [id])
+
+  @@unique([transactionId, ownerId])
+}
+
+model Lot {
+  id                    String   @id @default(cuid())
+  ownerId               String
+  assetId               String
+  sourceTransactionId   String
+  openedAt              DateTime
+  originalQuantity      Decimal
+  remainingQuantity     Decimal
+  costBasis             Decimal
+  realizedProceeds      Decimal  @default(0)
+  realizedGainLoss      Decimal  @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@index([ownerId, assetId])
+  @@index([openedAt])
+}
+
+model Price {
+  id        String   @id @default(cuid())
+  assetId   String
+  date      DateTime
+  close     Decimal
+  source    String   @default("manual")
+  createdAt DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, date, source])
+  @@index([date])
+}
+
+model BenchmarkSnapshot {
+  id        String        @id @default(cuid())
+  type      BenchmarkType
+  date      DateTime
+  value     Decimal
+  source    String        @default("manual")
+  createdAt DateTime      @default(now())
+
+  @@unique([type, date, source])
+}
+
+model PortfolioSnapshot {
+  id        String   @id @default(cuid())
+  date      DateTime
+  ownerId   String?
+  value     Decimal
+  createdAt DateTime @default(now())
+
+  @@index([date])
+  @@index([ownerId])
+}
+
+model DecisionScore {
+  id                  String        @id @default(cuid())
+  transactionId        String
+  benchmark            BenchmarkType
+  asOfDate             DateTime
+  actualValue          Decimal
+  benchmarkValue       Decimal
+  actualReturnPct      Decimal
+  benchmarkReturnPct   Decimal
+  excessReturnPct      Decimal
+  grade                String
+  createdAt            DateTime      @default(now())
+
+  @@unique([transactionId, benchmark, asOfDate])
+}
+
+model ImportBatch {
+  id        String   @id @default(cuid())
+  source    String
+  filename  String
+  rowCount  Int
+  createdAt DateTime @default(now())
+
+  transactions Transaction[]
+}

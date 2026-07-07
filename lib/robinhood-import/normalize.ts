@@ -1,0 +1,88 @@
+import { z } from 'zod';
+import type { LedgerTransaction, TransactionType } from '@/lib/types/domain';
+
+const RawRobinhoodRow = z.record(z.string(), z.string().optional());
+
+export interface ImportOwnerAllocation {
+  ownerId: string;
+  percentage: number;
+}
+
+export interface NormalizeRobinhoodRowOptions {
+  accountId: string;
+  assetLookup: (symbol: string) => { id: string; symbol: string } | undefined;
+  defaultAllocations: ImportOwnerAllocation[];
+}
+
+function get(row: Record<string, string | undefined>, candidates: string[]): string | undefined {
+  for (const candidate of candidates) {
+    const exact = row[candidate];
+    if (exact != null && exact !== '') return exact;
+    const foundKey = Object.keys(row).find((key) => key.trim().toLowerCase() === candidate.trim().toLowerCase());
+    if (foundKey && row[foundKey]) return row[foundKey];
+  }
+  return undefined;
+}
+
+function money(value: string | undefined): number {
+  if (!value) return 0;
+  return Number(value.replace(/[$,()]/g, '').trim()) * (value.includes('(') ? -1 : 1);
+}
+
+function number(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value.replace(/[,]/g, '').trim());
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function inferType(rawType: string | undefined, quantity?: number): TransactionType {
+  const normalized = (rawType ?? '').toLowerCase();
+  if (normalized.includes('dividend')) return 'DIVIDEND';
+  if (normalized.includes('deposit')) return 'DEPOSIT';
+  if (normalized.includes('withdraw')) return 'WITHDRAWAL';
+  if (normalized.includes('fee')) return 'FEE';
+  if (normalized.includes('sell')) return 'SELL';
+  if (normalized.includes('buy')) return 'BUY';
+  if ((quantity ?? 0) < 0) return 'SELL';
+  return 'BUY';
+}
+
+/**
+ * Normalizes a Robinhood-like activity CSV row into the app ledger format.
+ * Robinhood exports vary, so this accepts several likely column names and should be expanded with real samples.
+ */
+export function normalizeRobinhoodRow(raw: unknown, options: NormalizeRobinhoodRowOptions): LedgerTransaction | null {
+  const row = RawRobinhoodRow.parse(raw);
+
+  const symbol = get(row, ['Symbol', 'Instrument', 'Ticker']);
+  const rawType = get(row, ['Activity Type', 'Trans Code', 'Type', 'Description']);
+  const tradeDate = get(row, ['Trade Date', 'Process Date', 'Date', 'Activity Date']);
+  const quantity = number(get(row, ['Quantity', 'Qty', 'Shares']));
+  const price = money(get(row, ['Price', 'Share Price', 'Average Price']));
+  const amount = money(get(row, ['Amount', 'Net Amount', 'Total', 'Value']));
+  const fee = Math.abs(money(get(row, ['Fee', 'Fees', 'Reg Fee'])));
+
+  if (!tradeDate) return null;
+
+  const asset = symbol ? options.assetLookup(symbol) : undefined;
+  const type = inferType(rawType, quantity);
+  const absoluteQuantity = quantity == null ? undefined : Math.abs(quantity);
+  const grossAmount = amount || (absoluteQuantity && price ? absoluteQuantity * price : 0);
+
+  return {
+    id: `import:${tradeDate}:${symbol ?? 'cash'}:${rawType ?? 'unknown'}:${grossAmount}`,
+    type,
+    tradeDate: new Date(tradeDate).toISOString(),
+    assetId: asset?.id,
+    quantity: absoluteQuantity,
+    price: price || undefined,
+    grossAmount: Math.abs(grossAmount),
+    fee,
+    allocations: options.defaultAllocations.map((allocation) => ({
+      ownerId: allocation.ownerId,
+      percentage: allocation.percentage,
+      amount: Math.abs(grossAmount) * allocation.percentage,
+      quantity: absoluteQuantity == null ? undefined : absoluteQuantity * allocation.percentage,
+    })),
+  };
+}
