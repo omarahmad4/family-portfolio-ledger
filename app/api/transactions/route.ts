@@ -22,12 +22,60 @@ const createTransactionSchema = z.object({
   allocations: z.array(allocationSchema).min(1),
 });
 
+import { calculatePortfolioValue, calculateTotalUnits } from '@/lib/accounting/pool';
+
 export async function POST(request: Request) {
   const body = await request.json();
   const input = createTransactionSchema.parse(body);
   const totalPct = input.allocations.reduce((sum, row) => sum + row.percentage, 0);
   if (Math.abs(totalPct - 1) > 0.000001) {
     return NextResponse.json({ error: 'Allocations must add up to 100%.' }, { status: 400 });
+  }
+
+  // Calculate dynamic pool units if it is a DEPOSIT or WITHDRAWAL cash flow
+  let unitsQuantity: number | null = null;
+  if (input.type === 'DEPOSIT' || input.type === 'WITHDRAWAL') {
+    const dbTransactions = await prisma.transaction.findMany({
+      include: { allocations: true, asset: true },
+    });
+
+    const runningTxs = dbTransactions.map((tx) => ({
+      id: tx.id,
+      type: tx.type,
+      tradeDate: tx.tradeDate.toISOString(),
+      assetId: tx.assetId,
+      assetSymbol: tx.asset?.symbol ?? null,
+      quantity: tx.quantity ? Number(tx.quantity) : null,
+      price: tx.price ? Number(tx.price) : null,
+      grossAmount: Number(tx.grossAmount),
+      fee: Number(tx.fee),
+      allocations: tx.allocations.map((a) => ({
+        ownerId: a.ownerId,
+        percentage: Number(a.percentage),
+        amount: Number(a.amount),
+        quantity: a.quantity ? Number(a.quantity) : null,
+      })),
+    }));
+
+    const targetDate = new Date(input.tradeDate);
+    const priorTxs = runningTxs.filter((rtx) => new Date(rtx.tradeDate) <= targetDate);
+
+    // Resolve historical prices at target date
+    const prices: Record<string, number> = { USD: 1.0 };
+    for (const rtx of priorTxs) {
+      if (rtx.assetId && !prices[rtx.assetId]) {
+        const p = await prisma.price.findFirst({
+          where: { assetId: rtx.assetId, date: { lte: targetDate } },
+          orderBy: { date: 'desc' },
+        });
+        prices[rtx.assetId] = p ? Number(p.close) : (rtx.price ?? 1.0);
+      }
+    }
+
+    const portfolioValue = calculatePortfolioValue(priorTxs, prices);
+    const totalUnits = calculateTotalUnits(priorTxs);
+    const navpu = totalUnits <= 0 ? 1.0 : portfolioValue / totalUnits;
+    unitsQuantity = Math.abs(input.grossAmount) / navpu;
   }
 
   const tx = await prisma.transaction.create({
@@ -46,7 +94,9 @@ export async function POST(request: Request) {
           ownerId: allocation.ownerId,
           percentage: allocation.percentage,
           amount: Math.abs(input.grossAmount) * allocation.percentage,
-          quantity: input.quantity == null ? null : Math.abs(input.quantity) * allocation.percentage,
+          quantity: unitsQuantity != null
+            ? unitsQuantity * allocation.percentage
+            : (input.quantity == null ? null : Math.abs(input.quantity) * allocation.percentage),
         })),
       },
     },
