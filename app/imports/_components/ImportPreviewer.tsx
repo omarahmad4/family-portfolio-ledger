@@ -93,7 +93,7 @@ export function ImportPreviewer({ owners }: { owners: Owner[] }) {
         </button>
         {message && <span className="form-message">{message}</span>}
       </p>
-      {preview.length > 0 && <table className="table"><thead><tr><th>Date</th><th>Type</th><th>Asset ID</th><th>Qty</th><th>Price</th><th>Amount</th><th>Allocations</th></tr></thead><tbody>{preview.map((row) => <tr key={row.id}><td>{new Date(row.tradeDate).toLocaleDateString()}</td><td>{row.type}</td><td>{row.assetId ?? 'Unmapped'}</td><td>{row.quantity ?? '—'}</td><td>{row.price ?? '—'}</td><td>{row.grossAmount}</td><td>{row.allocations.map((a) => `${Math.round(a.percentage * 100)}%`).join(', ')}</td></tr>)}</tbody></table>}
+      {preview.length > 0 && <table className="table"><thead><tr><th>Date</th><th>Type</th><th>Asset</th><th>Qty</th><th>Price</th><th>Amount</th><th>Allocations</th></tr></thead><tbody>{preview.map((row) => <tr key={row.id}><td>{new Date(row.tradeDate).toLocaleDateString()}</td><td>{row.type}</td><td>{row.assetSymbol ?? 'Cash'}</td><td>{row.quantity ?? '—'}</td><td>{row.price ?? '—'}</td><td>{row.grossAmount}</td><td>{row.allocations.map((a) => `${Math.round(a.percentage * 100)}%`).join(', ')}</td></tr>)}</tbody></table>}
     </div>
   );
 }

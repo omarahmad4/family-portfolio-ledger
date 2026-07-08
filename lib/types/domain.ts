@@ -19,6 +19,7 @@ export interface LedgerTransaction {
   type: TransactionType;
   tradeDate: string;
   assetId?: string;
+  assetSymbol?: string;
   quantity?: number;
   price?: number;
   grossAmount: number;

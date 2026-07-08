@@ -16,6 +16,7 @@ export function TransactionForm({ owners, assets, accounts }: { owners: Owner[];
   const [type, setType] = useState('BUY');
   const [selectedOwners, setSelectedOwners] = useState<string[]>(owners.map((o) => o.id));
 
+  const isCashFlow = type === 'DEPOSIT' || type === 'WITHDRAWAL';
   const equalPct = useMemo(() => selectedOwners.length ? 1 / selectedOwners.length : 0, [selectedOwners.length]);
 
   async function onSubmit(formData: FormData) {
@@ -30,7 +31,7 @@ export function TransactionForm({ owners, assets, accounts }: { owners: Owner[];
       grossAmount: Number(formData.get('grossAmount')),
       fee: formData.get('fee') ? Number(formData.get('fee')) : 0,
       notes: String(formData.get('notes') ?? ''),
-      allocations: selectedOwners.map((ownerId) => ({ ownerId, percentage: equalPct })),
+      allocations: isCashFlow ? selectedOwners.map((ownerId) => ({ ownerId, percentage: equalPct })) : undefined,
     };
 
     const res = await fetch('/api/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -40,6 +41,7 @@ export function TransactionForm({ owners, assets, accounts }: { owners: Owner[];
       return;
     }
     setMessage('Transaction saved.');
+    setSelectedOwners(owners.map((o) => o.id)); // reset
     startTransition(() => router.refresh());
   }
 
@@ -58,11 +60,13 @@ export function TransactionForm({ owners, assets, accounts }: { owners: Owner[];
       <label>Gross amount<input name="grossAmount" type="number" min="0" step="0.01" required placeholder="e.g. 5000" /></label>
       <label>Fee<input name="fee" type="number" min="0" step="0.01" defaultValue="0" /></label>
       <label className="wide">Notes<input name="notes" placeholder="Why did you make this decision?" /></label>
-      <fieldset className="wide allocation-box">
-        <legend>Allocate equally across selected owners</legend>
-        {owners.map((owner) => <label key={owner.id} className="checkbox-row"><input type="checkbox" checked={selectedOwners.includes(owner.id)} onChange={() => toggleOwner(owner.id)} /> {owner.name} {selectedOwners.includes(owner.id) ? `(${Math.round(equalPct * 10000) / 100}%)` : ''}</label>)}
-      </fieldset>
-      <div className="wide"><button className="button" type="submit" disabled={isPending || selectedOwners.length === 0}>Save transaction</button>{message && <span className="form-message">{message}</span>}</div>
+      {isCashFlow && (
+        <fieldset className="wide allocation-box">
+          <legend>Allocate cash flow equally across selected partners</legend>
+          {owners.map((owner) => <label key={owner.id} className="checkbox-row"><input type="checkbox" checked={selectedOwners.includes(owner.id)} onChange={() => toggleOwner(owner.id)} /> {owner.name} {selectedOwners.includes(owner.id) ? `(${Math.round(equalPct * 10000) / 100}%)` : ''}</label>)}
+        </fieldset>
+      )}
+      <div className="wide"><button className="button" type="submit" disabled={isPending || (isCashFlow && selectedOwners.length === 0)}>Save transaction</button>{message && <span className="form-message">{message}</span>}</div>
     </form>
   );
 }

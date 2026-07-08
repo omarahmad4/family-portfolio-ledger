@@ -32,6 +32,7 @@ export async function getLedgerTransactions(): Promise<LedgerTransaction[]> {
     type: tx.type,
     tradeDate: tx.tradeDate.toISOString(),
     assetId: tx.assetId ?? undefined,
+    assetSymbol: tx.asset?.symbol ?? undefined,
     quantity: tx.quantity == null ? undefined : toNumber(tx.quantity),
     price: tx.price == null ? undefined : toNumber(tx.price),
     grossAmount: toNumber(tx.grossAmount),

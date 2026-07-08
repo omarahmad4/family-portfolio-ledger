@@ -116,6 +116,7 @@ export function normalizeRobinhoodRow(raw: unknown, options: NormalizeRobinhoodR
     type,
     tradeDate: isoDate,
     assetId: asset?.id,
+    assetSymbol: symbol || undefined,
     quantity: absoluteQuantity,
     price: price || undefined,
     grossAmount: Math.abs(grossAmount),

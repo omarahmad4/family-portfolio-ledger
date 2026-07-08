@@ -28,7 +28,7 @@ export default async function TransactionsPage() {
         <table className="table">
           <thead><tr><th>Date</th><th>Type</th><th>Asset</th><th>Qty</th><th>Amount</th><th>Owners</th><th>Notes</th></tr></thead>
           <tbody>
-            {transactions.map((tx) => <tr key={tx.id}><td>{tx.tradeDate.toLocaleDateString()}</td><td>{tx.type}</td><td>{tx.asset?.symbol ?? 'Cash'}</td><td>{tx.quantity == null ? '—' : number(toNumber(tx.quantity))}</td><td>{money(toNumber(tx.grossAmount))}</td><td>{tx.allocations.map((a) => `${a.owner.name} ${Math.round(toNumber(a.percentage) * 100)}%`).join(', ')}</td><td>{tx.notes ?? '—'}</td></tr>)}
+            {transactions.map((tx) => <tr key={tx.id}><td>{tx.tradeDate.toLocaleDateString()}</td><td>{tx.type}</td><td>{tx.asset?.symbol ?? 'Cash'}</td><td>{tx.quantity == null ? '—' : number(toNumber(tx.quantity))}</td><td>{money(toNumber(tx.grossAmount))}</td><td>{tx.allocations.length > 0 ? tx.allocations.map((a) => `${a.owner.name} ${Math.round(toNumber(a.percentage) * 100)}%`).join(', ') : 'Pool'}</td><td>{tx.notes ?? '—'}</td></tr>)}
           </tbody>
         </table>
       </section>

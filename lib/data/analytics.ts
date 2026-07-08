@@ -35,7 +35,7 @@ export async function getPortfolioAnalytics() {
   );
 
   const usdAssetId = assets.find((a) => a.symbol === 'USD')?.id;
-  const holdings = computeHoldings(transactions, prices, usdAssetId);
+  const holdings = computeHoldings(transactions, prices, owners.map((o) => o.id), usdAssetId);
   const ownerSummary = summarizeByOwner(holdings);
   const lots = buildFifoLots(transactions);
 

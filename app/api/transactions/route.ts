@@ -19,7 +19,7 @@ const createTransactionSchema = z.object({
   grossAmount: z.coerce.number().positive(),
   fee: z.coerce.number().min(0).default(0),
   notes: z.string().optional().nullable(),
-  allocations: z.array(allocationSchema).min(1),
+  allocations: z.array(allocationSchema).optional(),
 });
 
 import { calculatePortfolioValue, calculateTotalUnits } from '@/lib/accounting/pool';
@@ -27,9 +27,16 @@ import { calculatePortfolioValue, calculateTotalUnits } from '@/lib/accounting/p
 export async function POST(request: Request) {
   const body = await request.json();
   const input = createTransactionSchema.parse(body);
-  const totalPct = input.allocations.reduce((sum, row) => sum + row.percentage, 0);
-  if (Math.abs(totalPct - 1) > 0.000001) {
-    return NextResponse.json({ error: 'Allocations must add up to 100%.' }, { status: 400 });
+  const isCashFlow = input.type === 'DEPOSIT' || input.type === 'WITHDRAWAL';
+
+  if (isCashFlow) {
+    if (!input.allocations || input.allocations.length === 0) {
+      return NextResponse.json({ error: 'Allocations are required for deposits and withdrawals.' }, { status: 400 });
+    }
+    const totalPct = input.allocations.reduce((sum, row) => sum + row.percentage, 0);
+    if (Math.abs(totalPct - 1) > 0.000001) {
+      return NextResponse.json({ error: 'Allocations must add up to 100%.' }, { status: 400 });
+    }
   }
 
   // Calculate dynamic pool units if it is a DEPOSIT or WITHDRAWAL cash flow
@@ -78,6 +85,17 @@ export async function POST(request: Request) {
     unitsQuantity = Math.abs(input.grossAmount) / navpu;
   }
 
+  const allocationsData = isCashFlow && input.allocations
+    ? {
+        create: input.allocations.map((allocation) => ({
+          ownerId: allocation.ownerId,
+          percentage: allocation.percentage,
+          amount: Math.abs(input.grossAmount) * allocation.percentage,
+          quantity: unitsQuantity != null ? unitsQuantity * allocation.percentage : null,
+        })),
+      }
+    : undefined;
+
   const tx = await prisma.transaction.create({
     data: {
       accountId: input.accountId,
@@ -89,16 +107,7 @@ export async function POST(request: Request) {
       grossAmount: Math.abs(input.grossAmount),
       fee: input.fee,
       notes: input.notes,
-      allocations: {
-        create: input.allocations.map((allocation) => ({
-          ownerId: allocation.ownerId,
-          percentage: allocation.percentage,
-          amount: Math.abs(input.grossAmount) * allocation.percentage,
-          quantity: unitsQuantity != null
-            ? unitsQuantity * allocation.percentage
-            : (input.quantity == null ? null : Math.abs(input.quantity) * allocation.percentage),
-        })),
-      },
+      allocations: allocationsData,
     },
   });
 

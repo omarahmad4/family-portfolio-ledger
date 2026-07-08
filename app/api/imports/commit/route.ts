@@ -39,6 +39,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const input = commitSchema.parse(body);
 
+    let account = await prisma.account.findFirst();
+    if (!account) {
+      account = await prisma.account.create({ data: { name: 'Shared Portfolio Account' } });
+    }
+    const resolvedAccountId = account.id;
+
     const [existingAssets, owners] = await Promise.all([
       prisma.asset.findMany(),
       prisma.owner.findMany(),
@@ -102,7 +108,7 @@ export async function POST(request: Request) {
       // Run baseline normalization (places placeholder allocations)
       const mockAllocations = [{ ownerId: input.defaultOwnerId, percentage: 1.0 }];
       const norm = normalizeRobinhoodRow(row, {
-        accountId: input.accountId,
+        accountId: resolvedAccountId,
         defaultAllocations: mockAllocations,
         assetLookup: (sym) => assetsList.find((a) => a.symbol === sym.toUpperCase().trim()),
       });
@@ -189,17 +195,8 @@ export async function POST(request: Request) {
           quantity: unitsIssued,
         }];
       } else {
-        // Trade / Fee / Dividend: Dynamic allocation based on pool unit shares immediately before transaction
-        const shares = getOwnerShares(priorTxs, activeOwnerIds);
-        allocations = activeOwnerIds.map((ownerId) => {
-          const pct = shares[ownerId] ?? 0;
-          return {
-            ownerId,
-            percentage: pct,
-            amount: norm.grossAmount * pct,
-            quantity: norm.quantity ? norm.quantity * pct : undefined,
-          };
-        });
+        // Trade / Fee / Dividend / Split: Belongs to the pool as a whole, so no partner allocations are stored
+        allocations = [];
       }
 
       const finalizedTx = {
@@ -253,7 +250,7 @@ export async function POST(request: Request) {
       toCommit.map((tx) =>
         prisma.transaction.create({
           data: {
-            accountId: input.accountId,
+            accountId: resolvedAccountId,
             assetId: tx.assetId,
             type: tx.type,
             tradeDate: new Date(tx.tradeDate),
