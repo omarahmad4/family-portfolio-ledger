@@ -3,7 +3,7 @@ import { normalizeRobinhoodRow } from '../../lib/robinhood-import/normalize';
 
 describe('Robinhood CSV Parser Normalization', () => {
   const mockAssets = [{ id: 'a1', symbol: 'AMZN' }];
-  const defaultAllocations = [{ ownerId: 'omar', percentage: 1.0 }];
+  const defaultAllocations = [{ ownerId: 'partner-1', percentage: 1.0 }];
 
   it('correctly maps stock BUY rows from Robinhood format', () => {
     const rawRow = {
@@ -47,7 +47,7 @@ describe('Robinhood CSV Parser Normalization', () => {
     expect(norm!.type).toBe('DEPOSIT');
     expect(norm!.assetId).toBeUndefined();
     expect(norm!.grossAmount).toBe(5000);
-    expect(norm!.allocations[0].ownerId).toBe('omar');
+    expect(norm!.allocations[0].ownerId).toBe('partner-1');
     expect(norm!.allocations[0].percentage).toBe(1.0);
   });
 
@@ -66,5 +66,50 @@ describe('Robinhood CSV Parser Normalization', () => {
     });
 
     expect(norm).toBeNull();
+  });
+
+  it('correctly maps various Robinhood activity codes', () => {
+    // CDIV should map to DIVIDEND
+    const cdivRow = {
+      'Instrument': 'AAPL',
+      'Trans Code': 'CDIV',
+      'Trade Date': '2021-03-12',
+      'Amount': '$15.00',
+    };
+    const normCdiv = normalizeRobinhoodRow(cdivRow, {
+      accountId: 'acc1',
+      defaultAllocations,
+      assetLookup: (sym) => ({ id: 'a2', symbol: sym }),
+    });
+    expect(normCdiv!.type).toBe('DIVIDEND');
+    expect(normCdiv!.grossAmount).toBe(15);
+
+    // GOLD should map to FEE
+    const goldRow = {
+      'Trans Code': 'GOLD',
+      'Trade Date': '2021-03-12',
+      'Amount': '($5.00)',
+    };
+    const normGold = normalizeRobinhoodRow(goldRow, {
+      accountId: 'acc1',
+      defaultAllocations,
+      assetLookup: () => undefined,
+    });
+    expect(normGold!.type).toBe('FEE');
+    expect(normGold!.grossAmount).toBe(5);
+
+    // ACH negative amount should map to WITHDRAWAL
+    const achWithdrawRow = {
+      'Trans Code': 'ACH',
+      'Trade Date': '2021-03-12',
+      'Amount': '($500.00)',
+    };
+    const normWithdraw = normalizeRobinhoodRow(achWithdrawRow, {
+      accountId: 'acc1',
+      defaultAllocations,
+      assetLookup: () => undefined,
+    });
+    expect(normWithdraw!.type).toBe('WITHDRAWAL');
+    expect(normWithdraw!.grossAmount).toBe(500);
   });
 });

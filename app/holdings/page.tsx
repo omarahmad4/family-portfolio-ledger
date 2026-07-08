@@ -17,7 +17,7 @@ export default async function HoldingsPage() {
         <p>Owner-level positions and cash splits calculated from the dynamic unit pool ledger. Shows true economic net worth fractions.</p>
       </section>
 
-      {/* Render one section per family member */}
+      {/* Render one section per partner */}
       {analytics.owners.map((owner) => {
         // Find holdings for this specific owner
         const ownerHoldings = analytics.holdings.filter((h) => h.ownerId === owner.id);

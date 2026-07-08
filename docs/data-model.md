@@ -4,8 +4,8 @@
 The ledger is the source of truth. Holdings should always be computed from transactions and allocations, not manually edited balances.
 
 ## Important tables
-- Owner: economic owner inside the family
-- Account: external account, initially Robinhood
+- Owner: economic owner/beneficiary
+- Account: external brokerage account
 - Asset: stocks, ETFs, crypto, cash
 - Transaction: normalized brokerage activity
 - TransactionAllocation: owner split for a transaction

@@ -12,8 +12,8 @@ const txs: LedgerTransaction[] = [
     price: 100,
     grossAmount: 1000,
     allocations: [
-      { ownerId: 'omar', percentage: 0.5, amount: 500, quantity: 5 },
-      { ownerId: 'mom', percentage: 0.5, amount: 500, quantity: 5 },
+      { ownerId: 'partner-1', percentage: 0.5, amount: 500, quantity: 5 },
+      { ownerId: 'partner-2', percentage: 0.5, amount: 500, quantity: 5 },
     ],
   },
   {
@@ -24,23 +24,23 @@ const txs: LedgerTransaction[] = [
     quantity: 10,
     price: 200,
     grossAmount: 2000,
-    allocations: [{ ownerId: 'omar', percentage: 1, amount: 2000, quantity: 10 }],
+    allocations: [{ ownerId: 'partner-1', percentage: 1, amount: 2000, quantity: 10 }],
   },
 ];
 
 describe('computeHoldings', () => {
   it('computes owner-level holdings and summary values', () => {
     const holdings = computeHoldings(txs, { amzn: 300 });
-    const omar = holdings.find((h) => h.ownerId === 'omar' && h.assetId === 'amzn');
-    const mom = holdings.find((h) => h.ownerId === 'mom' && h.assetId === 'amzn');
+    const partner1 = holdings.find((h) => h.ownerId === 'partner-1' && h.assetId === 'amzn');
+    const partner2 = holdings.find((h) => h.ownerId === 'partner-2' && h.assetId === 'amzn');
 
-    expect(omar?.quantity).toBe(15);
-    expect(omar?.costBasis).toBe(2500);
-    expect(omar?.marketValue).toBe(4500);
-    expect(mom?.quantity).toBe(5);
-    expect(mom?.marketValue).toBe(1500);
+    expect(partner1?.quantity).toBe(15);
+    expect(partner1?.costBasis).toBe(2500);
+    expect(partner1?.marketValue).toBe(4500);
+    expect(partner2?.quantity).toBe(5);
+    expect(partner2?.marketValue).toBe(1500);
 
     const summary = summarizeByOwner(holdings);
-    expect(summary.find((s) => s.ownerId === 'omar')?.marketValue).toBe(4500);
+    expect(summary.find((s) => s.ownerId === 'partner-1')?.marketValue).toBe(4500);
   });
 });

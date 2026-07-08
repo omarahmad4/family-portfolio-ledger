@@ -147,6 +147,24 @@ export async function POST(request: Request) {
       const targetDate = new Date(norm.tradeDate);
       const priorTxs = runningTxs.filter((rtx) => new Date(rtx.tradeDate) <= targetDate);
 
+      // Dynamic SPLIT handling: compute split ratio from prior transactions
+      if (norm.type === 'SPLIT' && symbolKey) {
+        const symbol = symbolKey.toUpperCase().trim();
+        let preSplitQty = 0;
+        for (const rtx of priorTxs) {
+          if (rtx.assetSymbol?.toUpperCase() === symbol) {
+            if (rtx.type === 'BUY' || rtx.type === 'TRANSFER_IN') {
+              preSplitQty += rtx.quantity ?? 0;
+            } else if (rtx.type === 'SELL' || rtx.type === 'TRANSFER_OUT') {
+              preSplitQty -= rtx.quantity ?? 0;
+            }
+          }
+        }
+        const additionalQty = norm.quantity ?? 0;
+        const splitRatio = preSplitQty <= 0 ? 1.0 : (preSplitQty + additionalQty) / preSplitQty;
+        norm.quantity = splitRatio;
+      }
+
       let allocations: any[] = [];
 
       if (norm.type === 'DEPOSIT' || norm.type === 'WITHDRAWAL') {

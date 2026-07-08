@@ -35,14 +35,49 @@ function number(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function inferType(rawType: string | undefined, quantity?: number): TransactionType {
-  const normalized = (rawType ?? '').toLowerCase();
+function inferType(rawType: string | undefined, amount: number, quantity?: number): TransactionType {
+  const code = (rawType ?? '').toUpperCase().trim();
+
+  // 1. ACH Deposits/Withdrawals
+  if (code === 'ACH') {
+    return amount >= 0 ? 'DEPOSIT' : 'WITHDRAWAL';
+  }
+
+  // 2. Interest / Dividends / Stock Lending / Cash Rewards (Inflows with no quantity)
+  if (['CDIV', 'MDIV', 'INT', 'SLIP', 'MISC', 'CIL', 'CONV'].includes(code)) {
+    if (amount < 0) return 'FEE';
+    return 'DIVIDEND';
+  }
+
+  // 3. Option sales (STC = Sell to Close option)
+  if (code === 'STC') {
+    return 'DIVIDEND';
+  }
+
+  // 4. Fees / Subscription / Margin Interest / Option buys (Outflows with no asset holdings)
+  if (['GOLD', 'DFEE', 'AFEE', 'MINT', 'BTO', 'OEXP'].includes(code)) {
+    return 'FEE';
+  }
+
+  // 5. Stock Splits
+  if (code === 'SPL' || code === 'SPLIT') {
+    return 'SPLIT';
+  }
+
+  // 6. Mergers (MRGS)
+  if (code === 'MRGS') {
+    return (quantity ?? 0) < 0 ? 'SELL' : 'BUY';
+  }
+
+  // 7. General Fallbacks
+  const normalized = code.toLowerCase();
   if (normalized.includes('dividend')) return 'DIVIDEND';
   if (normalized.includes('deposit')) return 'DEPOSIT';
   if (normalized.includes('withdraw')) return 'WITHDRAWAL';
   if (normalized.includes('fee')) return 'FEE';
   if (normalized.includes('sell')) return 'SELL';
   if (normalized.includes('buy')) return 'BUY';
+
   if ((quantity ?? 0) < 0) return 'SELL';
   return 'BUY';
 }
@@ -72,7 +107,7 @@ export function normalizeRobinhoodRow(raw: unknown, options: NormalizeRobinhoodR
   }
 
   const asset = symbol ? options.assetLookup(symbol) : undefined;
-  const type = inferType(rawType, quantity);
+  const type = inferType(rawType, amount, quantity);
   const absoluteQuantity = quantity == null ? undefined : Math.abs(quantity);
   const grossAmount = amount || (absoluteQuantity && price ? absoluteQuantity * price : 0);
 

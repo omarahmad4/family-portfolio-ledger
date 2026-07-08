@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import './globals.css';
 
 export const metadata = {
-  title: 'Family Portfolio Ledger',
+  title: 'Pooled Portfolio Ledger',
   description: 'Owner-level portfolio accounting and decision analytics.',
 };
 
@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <div className="shell">
           <aside className="sidebar">
-            <h1>FamilyAlpha</h1>
+            <h1>LedgerAlpha</h1>
             <p>Portfolio ledger & decision analytics</p>
             <nav>
               {nav.map(([label, href]) => (

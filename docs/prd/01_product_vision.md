@@ -1,6 +1,6 @@
 # LedgerAlpha - Product Vision & V1 Scope
 
-LedgerAlpha is a local-first investment tracker and family portfolio ledger. It is designed to solve a specific problem: tracking the true economic ownership and decision performance of a single brokerage account (initially Robinhood) whose assets are shared among multiple family members (Omar, Mom, Dad).
+LedgerAlpha is a local-first investment tracker and pooled portfolio ledger. It is designed to solve a specific problem: tracking the true economic ownership and decision performance of a single brokerage account (initially Robinhood) whose assets are shared among multiple partners (Partner 1, Partner 2, Partner 3).
 
 ---
 
@@ -16,7 +16,7 @@ It shifts the focus from passive balance tracking to **ledger-based economic own
 
 ### A. Unitized Fund Pool Model
 - Instead of manually splitting every individual trade (which is tedious and error-prone), the ledger tracks deposits and withdrawals of cash to establish ownership units (similar to a mutual fund or hedge fund).
-- Any stock or crypto purchases are conducted at the portfolio level, and their economic performance is automatically distributed according to each family member's current unit share.
+- Any stock or crypto purchases are conducted at the portfolio level, and their economic performance is automatically distributed according to each partner's current unit share.
 
 ### B. FIFO Lot & Decision Scoring
 - Each purchase is tracked as a distinct "lot/cohort".
@@ -35,5 +35,5 @@ It shifts the focus from passive balance tracking to **ledger-based economic own
 ---
 
 ## 3. Target Audience
-- **Primary Operator**: Omar (handles CSV imports, enters manual entries, analyzes decision scoring).
-- **Family Members**: Mom & Dad (receive accurate cost-basis tracking, position value breakdown, and allocation summaries).
+- **Primary Operator**: Partner 1 (handles CSV imports, enters manual entries, analyzes decision scoring).
+- **Partners**: Partner 2 & Partner 3 (receive accurate cost-basis tracking, position value breakdown, and allocation summaries).

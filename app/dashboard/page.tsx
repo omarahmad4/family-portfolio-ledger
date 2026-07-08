@@ -56,7 +56,7 @@ export default async function DashboardPage() {
     <>
       <section className="page-header">
         <h2>Dashboard</h2>
-        <p>Live family portfolio ledger powered by unitized accounting, historical benchmarks, and SQLite price caching.</p>
+        <p>Live pooled portfolio ledger powered by unitized accounting, historical benchmarks, and SQLite price caching.</p>
       </section>
 
       {/* Main KPI & Chart Grid */}
@@ -94,11 +94,11 @@ export default async function DashboardPage() {
 
       {/* Owner Value summary */}
       <section className="card" style={{ marginBottom: 20 }}>
-        <h3>Value by Family Member</h3>
+        <h3>Value by Partner</h3>
         <table className="table">
           <thead>
             <tr>
-              <th>Owner</th>
+              <th>Partner</th>
               <th>Market Value</th>
               <th>Capital Invested</th>
               <th>Net Gains/Losses</th>

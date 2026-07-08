@@ -1,6 +1,6 @@
-# LedgerAlpha (Family Portfolio Ledger)
+# LedgerAlpha (Pooled Portfolio Ledger)
 
-A local-first, zero-cost family investment pool tracker and ledger-based accounting dashboard. It enables tracking true economic ownership and decision scoring for a single brokerage account (like Robinhood) whose capital is pooled across multiple family owners (Omar, Mom, and Dad).
+A local-first, zero-cost pooled investment tracker and ledger-based accounting dashboard. It enables tracking true economic ownership and decision scoring for a single brokerage account (like Robinhood) whose capital is pooled across multiple partners (Partner 1, Partner 2, and Partner 3).
 
 ---
 
@@ -39,7 +39,7 @@ npm install
 ```
 
 ### Database Initialization
-Apply migrations and seed the SQLite database with family owner records:
+Apply migrations and seed the SQLite database with partner records:
 ```bash
 npx prisma migrate dev --name init
 npx prisma db seed

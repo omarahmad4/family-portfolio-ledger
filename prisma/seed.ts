@@ -175,14 +175,14 @@ async function main() {
   await prisma.account.deleteMany();
   await prisma.owner.deleteMany();
 
-  const [omar, mom, dad] = await Promise.all([
-    prisma.owner.create({ data: { name: 'Omar', slug: 'omar' } }),
-    prisma.owner.create({ data: { name: 'Mom', slug: 'mom' } }),
-    prisma.owner.create({ data: { name: 'Dad', slug: 'dad' } }),
+  const [partner1, partner2, partner3] = await Promise.all([
+    prisma.owner.create({ data: { name: 'Partner 1', slug: 'partner-1' } }),
+    prisma.owner.create({ data: { name: 'Partner 2', slug: 'partner-2' } }),
+    prisma.owner.create({ data: { name: 'Partner 3', slug: 'partner-3' } }),
   ]);
 
-  const ownerIds = [omar.id, mom.id, dad.id];
-  const account = await prisma.account.create({ data: { name: 'Shared Robinhood Account' } });
+  const ownerIds = [partner1.id, partner2.id, partner3.id];
+  const account = await prisma.account.create({ data: { name: 'Shared Portfolio Account' } });
 
   const assets = await Promise.all([
     prisma.asset.create({ data: { symbol: 'AMZN', name: 'Amazon.com Inc.', type: AssetType.STOCK } }),
@@ -208,25 +208,25 @@ async function main() {
     ],
   });
 
-  // 1. Omar deposits capital
-  await createDeposit({ accountId: account.id, ownerId: omar.id, date: '2021-01-01', amount: 10000, notes: 'Omar initial seed capital.' });
+  // 1. Partner 1 deposits capital
+  await createDeposit({ accountId: account.id, ownerId: partner1.id, date: '2021-01-01', amount: 10000, notes: 'Partner 1 initial seed capital.' });
 
-  // 2. Mom deposits capital
-  await createDeposit({ accountId: account.id, ownerId: mom.id, date: '2021-02-01', amount: 8000, notes: 'Mom seed capital.' });
+  // 2. Partner 2 deposits capital
+  await createDeposit({ accountId: account.id, ownerId: partner2.id, date: '2021-02-01', amount: 8000, notes: 'Partner 2 seed capital.' });
 
-  // 3. Buy AMZN (Split dynamically: Omar ~55.56%, Mom ~44.44%)
+  // 3. Buy AMZN (Split dynamically: Partner 1 ~55.56%, Partner 2 ~44.44%)
   await createBuy({ accountId: account.id, assetId: bySymbol.AMZN.id, symbol: 'AMZN', date: '2021-03-12', quantity: 50, price: 100, notes: 'AMZN buy for portfolio.', ownerIds });
 
-  // 4. Buy AAPL (Split dynamically: Omar ~55.56%, Mom ~44.44%)
+  // 4. Buy AAPL (Split dynamically: Partner 1 ~55.56%, Partner 2 ~44.44%)
   await createBuy({ accountId: account.id, assetId: bySymbol.AAPL.id, symbol: 'AAPL', date: '2022-05-10', quantity: 40, price: 145, notes: 'AAPL buy for portfolio.', ownerIds });
 
-  // 5. Buy BTC (Split dynamically: Omar ~55.56%, Mom ~44.44%)
+  // 5. Buy BTC (Split dynamically: Partner 1 ~55.56%, Partner 2 ~44.44%)
   await createBuy({ accountId: account.id, assetId: bySymbol.BTC.id, symbol: 'BTC', date: '2022-11-20', quantity: 0.15, price: 16600, notes: 'BTC buy for portfolio.', ownerIds });
 
-  // 6. Dad deposits capital (NAVPU calculated immediately before using historical simulated prices)
-  await createDeposit({ accountId: account.id, ownerId: dad.id, date: '2023-09-15', amount: 6000, notes: 'Dad capital addition.' });
+  // 6. Partner 3 deposits capital (NAVPU calculated immediately before using historical simulated prices)
+  await createDeposit({ accountId: account.id, ownerId: partner3.id, date: '2023-09-15', amount: 6000, notes: 'Partner 3 capital addition.' });
 
-  // 7. Sell AMZN (Split dynamically: Omar ~43.70%, Mom ~34.96%, Dad ~21.35%)
+  // 7. Sell AMZN (Split dynamically: Partner 1 ~43.70%, Partner 2 ~34.96%, Partner 3 ~21.35%)
   await createSell({ accountId: account.id, assetId: bySymbol.AMZN.id, symbol: 'AMZN', date: '2024-07-01', quantity: 10, price: 190, notes: 'Trim AMZN.', ownerIds });
 
   console.log('Seed complete.');

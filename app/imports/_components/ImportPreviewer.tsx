@@ -46,7 +46,7 @@ export function ImportPreviewer({ owners }: { owners: Owner[] }) {
         body: JSON.stringify({
           csv,
           accountId: 'main-brokerage',
-          defaultOwnerId: selectedOwners[0] || 'omar',
+          defaultOwnerId: selectedOwners[0] || 'partner-1',
           allocationOwnerIds: selectedOwners,
         }),
       });

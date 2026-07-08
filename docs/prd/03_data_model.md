@@ -9,8 +9,8 @@ This document describes how the relational database schema underpins the ledger-
 The database is built on **SQLite** using **Prisma ORM**. Below is the logical breakdown of the key tables:
 
 ### A. Owners & Accounts
-- `Owner`: Represents a family member (Omar, Mom, Dad). Has a `slug` for URL routing and tracks their allocation units.
-- `Account`: Represents the brokerage endpoint (e.g. "Shared Robinhood Account").
+- `Owner`: Represents a partner or account beneficiary (Partner 1, Partner 2, Partner 3). Has a `slug` for URL routing and tracks their allocation units.
+- `Account`: Represents the brokerage endpoint (e.g. "Shared Brokerage Account").
 
 ### B. Core Ledger Transactions
 - `Transaction`: Records every event affecting the portfolio. Types include `BUY`, `SELL`, `DIVIDEND`, `DEPOSIT`, `WITHDRAWAL`, `FEE`, `SPLIT`, `TRANSFER_IN`, `TRANSFER_OUT`.

@@ -15,7 +15,7 @@ export default async function TransactionsPage() {
     <>
       <section className="page-header">
         <h2>Transactions</h2>
-        <p>Add real ledger entries and split them across family owners. V1 currently supports equal splits in the UI; custom percentages are the next obvious upgrade.</p>
+        <p>Add real ledger entries and split them across partners. V1 currently supports equal splits in the UI; custom percentages are the next obvious upgrade.</p>
       </section>
 
       <section className="card">
