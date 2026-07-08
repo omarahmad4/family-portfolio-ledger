@@ -1,4 +1,5 @@
 import type { HoldingSummary, LedgerTransaction, PriceMap } from '@/lib/types/domain';
+import { calculateNetCash, getOwnerShares } from './pool';
 
 interface PositionAccumulator {
   ownerId: string;
@@ -21,7 +22,7 @@ function safePct(numerator: number, denominator: number): number | null {
  * V1 assumption: weighted average cost basis for summary views.
  * Lot-level FIFO lives separately in lots.ts.
  */
-export function computeHoldings(transactions: LedgerTransaction[], prices: PriceMap): HoldingSummary[] {
+export function computeHoldings(transactions: LedgerTransaction[], prices: PriceMap, usdAssetId?: string): HoldingSummary[] {
   const positions = new Map<string, PositionAccumulator>();
 
   const sorted = [...transactions].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
@@ -75,7 +76,7 @@ export function computeHoldings(transactions: LedgerTransaction[], prices: Price
     }
   }
 
-  return [...positions.values()]
+  const list = [...positions.values()]
     .filter((p) => Math.abs(p.quantity) > 1e-9)
     .map((p) => {
       const price = prices[p.assetId] ?? 0;
@@ -91,6 +92,28 @@ export function computeHoldings(transactions: LedgerTransaction[], prices: Price
         unrealizedReturnPct: safePct(unrealizedGainLoss, p.costBasis),
       };
     });
+
+  // Inject cash holdings if usdAssetId is provided
+  if (usdAssetId) {
+    const cashBalance = calculateNetCash(transactions as any);
+    const ownerIds = Array.from(new Set(transactions.flatMap((tx) => tx.allocations.map((a) => a.ownerId))));
+    const shares = getOwnerShares(transactions as any, ownerIds);
+
+    for (const ownerId of ownerIds) {
+      const ownerCash = (shares[ownerId] ?? 0) * cashBalance;
+      list.push({
+        ownerId,
+        assetId: usdAssetId,
+        quantity: ownerCash,
+        costBasis: ownerCash,
+        marketValue: ownerCash,
+        unrealizedGainLoss: 0,
+        unrealizedReturnPct: 0,
+      });
+    }
+  }
+
+  return list;
 }
 
 export function summarizeByOwner(holdings: HoldingSummary[]) {

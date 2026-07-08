@@ -1,43 +1,67 @@
+import { BenchmarkType } from '@prisma/client';
 import { buildFifoLots } from '@/lib/accounting/lots';
 import { computeHoldings, summarizeByOwner } from '@/lib/accounting/holdings';
-import { getAssets, getLedgerTransactions, getLatestPrices, getOwners } from '@/lib/data/ledger';
-import { scoreDecision } from '@/lib/scoring/decisionScore';
+import { getAssets, getLedgerTransactions, getOwners } from '@/lib/data/ledger';
+import { scoreTransactionDecision } from '@/lib/scoring/decisionScore';
+import { YahooFinanceMarketDataProvider } from '@/lib/market-data/provider';
+import type { PriceMap } from '@/lib/types/domain';
 
 export async function getPortfolioAnalytics() {
-  const [owners, assets, transactions, prices] = await Promise.all([
+  const [owners, assets, transactions] = await Promise.all([
     getOwners(),
     getAssets(),
     getLedgerTransactions(),
-    getLatestPrices(),
   ]);
 
-  const holdings = computeHoldings(transactions, prices);
+  const provider = new YahooFinanceMarketDataProvider();
+
+  // 1. Resolve Prices Map dynamically using the caching provider
+  const prices: PriceMap = {};
+  await Promise.all(
+    assets.map(async (asset) => {
+      if (asset.symbol === 'USD') {
+        prices[asset.id] = 1.0;
+      } else {
+        try {
+          // This calls yahoo-finance2 or retrieves from prisma cache
+          const latest = await provider.getLatestPrice(asset.symbol);
+          prices[asset.id] = latest;
+        } catch (err) {
+          console.warn(`Could not resolve latest price for ${asset.symbol}`, err);
+          prices[asset.id] = 0.0;
+        }
+      }
+    })
+  );
+
+  const usdAssetId = assets.find((a) => a.symbol === 'USD')?.id;
+  const holdings = computeHoldings(transactions, prices, usdAssetId);
   const ownerSummary = summarizeByOwner(holdings);
   const lots = buildFifoLots(transactions);
 
   const assetById = new Map(assets.map((asset) => [asset.id, asset]));
   const ownerById = new Map(owners.map((owner) => [owner.id, owner]));
 
-  const decisionRows = lots
-    .filter((lot) => lot.originalQuantity > 0)
-    .map((lot) => {
-      const currentPrice = prices[lot.assetId] ?? 0;
-      const currentValue = lot.remainingQuantity * currentPrice + lot.realizedProceeds;
-      const investedAmount = lot.originalCostBasis;
-      // V1 placeholder benchmark: assumes SPY-like benchmark compounded to 35% total since buy.
-      // Replace with BenchmarkSnapshot lookup once benchmark imports are wired.
-      const benchmarkCurrentValue = Math.max(investedAmount, investedAmount * 1.35);
-      const score = scoreDecision({ investedAmount: Math.max(investedAmount, 0.0001), currentValue, benchmarkCurrentValue });
+  // 2. Resolve Dynamic Decision Grading Cohorts
+  const buyTransactions = transactions.filter((t) => t.type === 'BUY');
+  const scoredDecisions = await Promise.all(
+    buyTransactions.map(async (tx) => {
+      const score = await scoreTransactionDecision(tx, transactions, provider, BenchmarkType.SPY);
+      const symbol = tx.assetId ? assetById.get(tx.assetId)?.symbol ?? 'Unknown' : 'Unknown';
       return {
-        ...lot,
-        ownerName: ownerById.get(lot.ownerId)?.name ?? 'Unknown',
-        symbol: assetById.get(lot.assetId)?.symbol ?? 'Unknown',
-        currentPrice,
-        currentValue,
+        id: tx.id,
+        tradeDate: tx.tradeDate,
+        symbol,
+        grossAmount: tx.grossAmount,
+        quantity: tx.quantity ?? 0,
+        price: tx.price ?? 0,
         ...score,
       };
     })
-    .sort((a, b) => b.excessReturnPct - a.excessReturnPct);
+  );
+
+  // Clean up any null scores and sort by excess alpha descending
+  const decisionRows = scoredDecisions.filter((s) => s.grade != null).sort((a: any, b: any) => b.excessReturnPct - a.excessReturnPct);
 
   const totals = ownerSummary.reduce(
     (acc, row) => {
@@ -46,7 +70,7 @@ export async function getPortfolioAnalytics() {
       acc.unrealizedGainLoss += row.unrealizedGainLoss;
       return acc;
     },
-    { marketValue: 0, costBasis: 0, unrealizedGainLoss: 0 },
+    { marketValue: 0, costBasis: 0, unrealizedGainLoss: 0 }
   );
 
   return {
