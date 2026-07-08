@@ -4,7 +4,8 @@
  * Connects to yahoo-finance2 and caching tables (Prisma) to fetch and store prices.
  */
 
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
+const yahooFinance = new YahooFinance();
 import { prisma } from '../db/prisma';
 
 export interface HistoricalPrice {

@@ -39,3 +39,7 @@ docker-migrate:
 docker-seed:
 	docker compose run --rm web npx prisma db seed
 
+test-e2e:
+	npx playwright test
+
+

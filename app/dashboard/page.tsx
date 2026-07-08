@@ -14,6 +14,7 @@ export default async function DashboardPage() {
   // Calculate Net Cash and Cash Drag %
   const cashBalance = calculateNetCash(analytics.transactions as any);
   const cashDrag = totalValue > 0 ? cashBalance / totalValue : 0.0;
+  const usdAssetId = analytics.assets.find((a) => a.symbol === 'USD')?.id;
 
   // Group allocations for Recharts chart
   const assetMap = new Map(analytics.assets.map((a) => [a.id, a]));
@@ -64,7 +65,7 @@ export default async function DashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
           <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <h3>Total portfolio value (NAV)</h3>
-            <div className="metric" style={{ fontSize: '32px' }}>{money(totalValue)}</div>
+            <div className="metric" data-testid="total-nav" style={{ fontSize: '32px' }}>{money(totalValue)}</div>
           </div>
           <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <h3>Net unrealized return</h3>
@@ -78,7 +79,7 @@ export default async function DashboardPage() {
           </div>
           <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <h3>Cash drag %</h3>
-            <div className="metric" style={{ fontSize: '26px', color: cashDrag > 0.15 ? '#f59e0b' : '#38bdf8' }}>
+            <div className="metric" data-testid="cash-drag" style={{ fontSize: '26px', color: cashDrag > 0.15 ? '#f59e0b' : '#38bdf8' }}>
               {pct(cashDrag)} <span style={{ fontSize: '13px', fontWeight: 400, color: '#94a3b8' }}>({money(cashBalance)} idle)</span>
             </div>
           </div>

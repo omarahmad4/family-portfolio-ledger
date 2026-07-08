@@ -8,6 +8,7 @@ import { BenchmarkType } from '@prisma/client';
 import { buildFifoLots } from '../accounting/lots';
 import type { LedgerTransaction } from '../types/domain';
 import type { MarketDataProvider } from '../market-data/provider';
+import { prisma } from '../db/prisma';
 
 export type DecisionGrade = 'A' | 'B' | 'C' | 'D' | 'F';
 
@@ -63,7 +64,18 @@ export async function scoreTransactionDecision(
   }
 
   const buyDate = tx.tradeDate.split('T')[0];
-  const assetSymbol = tx.assetId; // assetId acts as ticker in standard transactions
+  let assetSymbol = '';
+  if (tx.assetId) {
+    try {
+      const asset = await prisma.asset.findUnique({ where: { id: tx.assetId } });
+      assetSymbol = asset?.symbol ?? tx.assetId;
+    } catch {
+      assetSymbol = tx.assetId;
+    }
+  }
+  if (!assetSymbol) {
+    return null;
+  }
 
   // 2. Fetch prices at buy date
   const assetPriceBuy = tx.price ?? (tx.grossAmount / (tx.quantity ?? 1));

@@ -36,7 +36,7 @@ export default async function HoldingsPage() {
         const totalPct = ownerSummaryRow?.unrealizedReturnPct ?? 0;
 
         return (
-          <section key={owner.id} className="card" style={{ marginBottom: 24 }}>
+          <section key={owner.id} data-testid="owner-section" className="card" style={{ marginBottom: 24 }}>
             {/* Header bar with owner specific KPIs */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '14px' }}>
               <div>

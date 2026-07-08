@@ -76,13 +76,14 @@ export function ImportPreviewer({ owners }: { owners: Owner[] }) {
         <strong>Default allocation for preview</strong>
         {owners.map((owner) => <label key={owner.id} className="checkbox-row"><input type="checkbox" checked={selectedOwners.includes(owner.id)} onChange={() => toggleOwner(owner.id)} /> {owner.name}</label>)}
       </div>
-      <textarea className="csv-box" value={csv} onChange={(e) => setCsv(e.target.value)} placeholder={'Paste Robinhood CSV text here. Example:\nTrade Date,Activity Type,Symbol,Quantity,Price,Amount\n2024-01-01,Buy,AAPL,10,180,1800'} />
+      <textarea className="csv-box" data-testid="csv-textarea" value={csv} onChange={(e) => setCsv(e.target.value)} placeholder={'Paste Robinhood CSV text here. Example:\nTrade Date,Activity Type,Symbol,Quantity,Price,Amount\n2024-01-01,Buy,AAPL,10,180,1800'} />
       <p>
-        <button className="button" type="button" onClick={previewCsv} disabled={isImporting || !csv.trim() || selectedOwners.length === 0}>
+        <button className="button" data-testid="btn-preview" type="button" onClick={previewCsv} disabled={isImporting || !csv.trim() || selectedOwners.length === 0}>
           Preview normalized rows
         </button>
         <button
           className="button"
+          data-testid="btn-commit"
           type="button"
           onClick={commitImport}
           disabled={isImporting || !csv.trim() || selectedOwners.length === 0}
