@@ -37,6 +37,7 @@ export async function getLedgerTransactions(): Promise<LedgerTransaction[]> {
     price: tx.price == null ? undefined : toNumber(tx.price),
     grossAmount: toNumber(tx.grossAmount),
     fee: toNumber(tx.fee),
+    notes: tx.notes ?? undefined,
     allocations: tx.allocations.map((allocation) => ({
       ownerId: allocation.ownerId,
       percentage: toNumber(allocation.percentage),

@@ -55,6 +55,7 @@ export async function getPortfolioAnalytics() {
         grossAmount: tx.grossAmount,
         quantity: tx.quantity ?? 0,
         price: tx.price ?? 0,
+        notes: tx.notes,
         ...score,
       };
     })

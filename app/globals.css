@@ -48,3 +48,21 @@ main { padding: 36px; }
 .grade-c { color: #fde68a; }
 .grade-d, .grade-f { color: #fca5a5; }
 @media (max-width: 900px) { .shell { grid-template-columns: 1fr; } .sidebar { border-right: 0; border-bottom: 1px solid var(--border); } .grid, .form-grid { grid-template-columns: 1fr; } main { padding: 22px; } }
+
+.table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s, color 0.15s;
+}
+.table th.sortable:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+.sort-indicator {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  vertical-align: middle;
+}
+

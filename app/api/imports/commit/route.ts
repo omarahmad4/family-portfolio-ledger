@@ -21,6 +21,7 @@ const commitTransactionSchema = z.object({
   price: z.number().optional().nullable(),
   grossAmount: z.number(),
   fee: z.number().optional().nullable(),
+  notes: z.string().optional().nullable(),
   allocations: z.array(
     z.object({
       ownerId: z.string(),
@@ -79,6 +80,21 @@ export async function POST(request: Request) {
       account = await prisma.account.create({ data: { name: 'Shared Portfolio Account' } });
     }
     const resolvedAccountId = account.id;
+
+    // Clear sample seed data if this is the user's first CSV import
+    const totalTxs = await prisma.transaction.count();
+    const sampleTxs = await prisma.transaction.count({
+      where: { notes: { startsWith: '[SAMPLE]' } }
+    });
+    if (totalTxs > 0 && totalTxs === sampleTxs) {
+      await prisma.$transaction([
+        prisma.lot.deleteMany(),
+        prisma.decisionScore.deleteMany(),
+        prisma.transactionAllocation.deleteMany(),
+        prisma.transaction.deleteMany(),
+        prisma.price.deleteMany({ where: { source: { in: ['yahoo-quote', 'seed'] } } }),
+      ]);
+    }
 
     // Fetch existing assets, owners and transactions for validation and duplicate checking
     const [existingAssets, owners, dbTransactions] = await Promise.all([
@@ -235,6 +251,7 @@ export async function POST(request: Request) {
         price: tx.price ?? null,
         grossAmount: tx.grossAmount,
         fee: tx.fee ?? 0,
+        notes: tx.notes ?? null,
         allocations,
       };
 
@@ -292,6 +309,7 @@ export async function POST(request: Request) {
             price: tx.price,
             grossAmount: tx.grossAmount,
             fee: tx.fee,
+            notes: tx.notes,
             importBatchId: batch.id,
             allocations: {
               create: tx.allocations.map((a: any) => ({

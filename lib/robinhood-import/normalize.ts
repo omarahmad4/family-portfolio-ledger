@@ -97,6 +97,11 @@ export function normalizeRobinhoodRow(raw: unknown, options: NormalizeRobinhoodR
   const amount = money(get(row, ['Amount', 'Net Amount', 'Total', 'Value']));
   const fee = Math.abs(money(get(row, ['Fee', 'Fees', 'Reg Fee'])));
 
+  const description = get(row, ['Description']) || '';
+  const isReinvestment = description.toLowerCase().includes('reinvestment') || 
+                         (rawType ?? '').toLowerCase().includes('reinvestment');
+  const notes = isReinvestment ? 'Dividend Reinvestment' : undefined;
+
   if (!tradeDate) return null;
 
   let isoDate: string;
@@ -121,6 +126,7 @@ export function normalizeRobinhoodRow(raw: unknown, options: NormalizeRobinhoodR
     price: price || undefined,
     grossAmount: Math.abs(grossAmount),
     fee,
+    notes,
     allocations: options.defaultAllocations.map((allocation) => ({
       ownerId: allocation.ownerId,
       percentage: allocation.percentage,

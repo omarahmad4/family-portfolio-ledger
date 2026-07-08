@@ -24,6 +24,7 @@ export interface LedgerTransaction {
   price?: number;
   grossAmount: number;
   fee?: number;
+  notes?: string;
   allocations: Array<{
     ownerId: string;
     percentage: number;
