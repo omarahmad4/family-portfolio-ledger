@@ -1,3 +1,9 @@
+/**
+ * @file lots.ts
+ * @description Core accounting module to build FIFO (First-In, First-Out) transaction lots
+ * at the pool level. This logic is used by the decision scorecard system to track decision quality.
+ */
+
 import type { LedgerTransaction } from '@/lib/types/domain';
 
 export interface LotState {
@@ -21,8 +27,11 @@ export interface LotState {
 }
 
 /**
- * Builds FIFO lots from ledger transactions.
- * This is the calculation that powers cohort analysis.
+ * Builds FIFO transaction lots from chronological transactions at the pool level.
+ * Traces buy lots and applies sales to reduce remaining quantities in FIFO order.
+ * 
+ * @param transactions Chronological list of ledger transactions.
+ * @returns Array of calculated FIFO lots.
  */
 export function buildFifoLots(transactions: LedgerTransaction[]): LotState[] {
   const lots: LotState[] = [];

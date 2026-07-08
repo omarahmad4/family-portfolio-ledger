@@ -1,19 +1,47 @@
+/**
+ * @file route.ts
+ * @description API endpoint to commit previewed CSV transactions to the ledger database.
+ * Deduplicates rows, resolves or creates assets, computes progressive units for cash flows,
+ * and saves transaction batches inside a database transaction.
+ */
+
 import { NextResponse } from 'next/server';
-import Papa from 'papaparse';
 import { z } from 'zod';
-import { AssetType, BenchmarkType, Prisma } from '@prisma/client';
+import { AssetType, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
-import { normalizeRobinhoodRow } from '@/lib/robinhood-import/normalize';
 import { calculatePortfolioValue, calculateTotalUnits, getOwnerShares, TransactionInput } from '@/lib/accounting/pool';
 
-const commitSchema = z.object({
-  csv: z.string().min(1),
-  accountId: z.string().min(1),
-  defaultOwnerId: z.string().min(1),
-  allocationOwnerIds: z.array(z.string()).min(1),
+const commitTransactionSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  tradeDate: z.string(),
+  assetId: z.string().optional().nullable(),
+  assetSymbol: z.string().optional().nullable(),
+  quantity: z.number().optional().nullable(),
+  price: z.number().optional().nullable(),
+  grossAmount: z.number(),
+  fee: z.number().optional().nullable(),
+  allocations: z.array(
+    z.object({
+      ownerId: z.string(),
+      percentage: z.number(),
+      amount: z.number(),
+      quantity: z.number().optional().nullable(),
+    })
+  ),
 });
 
-// Helper to convert DB transaction row to TransactionInput format for math calculations
+const commitSchema = z.object({
+  transactions: z.array(commitTransactionSchema),
+});
+
+/**
+ * Converts a database Transaction record to a domain TransactionInput record for pool math calculations.
+ * 
+ * @param tx The database transaction object with allocations and asset.
+ * @param assetSymbol The symbol string of the asset.
+ * @returns A TransactionInput object.
+ */
 function toInputTx(tx: any, assetSymbol?: string): TransactionInput {
   return {
     id: tx.id,
@@ -34,128 +62,123 @@ function toInputTx(tx: any, assetSymbol?: string): TransactionInput {
   };
 }
 
+/**
+ * POST handler to commit normalized transactions.
+ * 
+ * @param request HTTP request containing transaction payloads.
+ * @returns HTTP response with imported and skipped counts.
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const input = commitSchema.parse(body);
 
+    // Resolve a valid account from the database or create a default one
     let account = await prisma.account.findFirst();
     if (!account) {
       account = await prisma.account.create({ data: { name: 'Shared Portfolio Account' } });
     }
     const resolvedAccountId = account.id;
 
-    const [existingAssets, owners] = await Promise.all([
+    // Fetch existing assets, owners and transactions for validation and duplicate checking
+    const [existingAssets, owners, dbTransactions] = await Promise.all([
       prisma.asset.findMany(),
       prisma.owner.findMany(),
+      prisma.transaction.findMany({ include: { allocations: true, asset: true } }),
     ]);
 
     const ownerSet = new Set(owners.map((o) => o.id));
-    const activeOwnerIds = input.allocationOwnerIds.filter((id) => ownerSet.has(id));
-    if (activeOwnerIds.length === 0) {
-      return NextResponse.json({ error: 'No valid allocation owners selected.' }, { status: 400 });
-    }
-    if (!ownerSet.has(input.defaultOwnerId)) {
-      return NextResponse.json({ error: 'Invalid default owner selected.' }, { status: 400 });
-    }
-
-    // 1. Ingest CSV data
-    const parsed = Papa.parse<Record<string, string>>(input.csv, { header: true, skipEmptyLines: true });
-    
-    // Create an in-memory mutable list of assets to resolve creations on the fly
     const assetsList = [...existingAssets];
+    
+    // Helper to search assets list by symbol
     const assetLookup = (sym: string) => {
       const upper = sym.toUpperCase().trim();
       return assetsList.find((a) => a.symbol === upper);
     };
 
-    // Load all current transactions from the database as base context
-    const dbTransactions = await prisma.transaction.findMany({
-      include: { allocations: true, asset: true },
-    });
-    
-    // Maintain a running list of prior transactions (DB + newly resolved in this import loop)
-    // sorted chronologically to compute progressive NAVPU and ownership splits
+    // Maintain chronological running list of transactions for NAV calculation
     const runningTxs: TransactionInput[] = dbTransactions.map((tx) => toInputTx(tx, tx.asset?.symbol));
 
     const toCommit: any[] = [];
     let skippedCount = 0;
 
-    for (const row of parsed.data) {
-      // Clean symbol resolution or creation
-      const symbolKey = row['Symbol'] || row['Instrument'] || row['Ticker'];
-      let assetId: string | undefined = undefined;
-
-      if (symbolKey) {
-        const upperSymbol = symbolKey.toUpperCase().trim();
-        let found = assetLookup(upperSymbol);
+    for (const tx of input.transactions) {
+      // 1. Resolve or create Asset
+      let resolvedAssetId = tx.assetId;
+      if (tx.assetSymbol && !resolvedAssetId) {
+        const symbol = tx.assetSymbol.toUpperCase().trim();
+        let found = assetLookup(symbol);
         if (!found) {
-          // Create missing asset in database immediately to have valid assetId
-          const isCrypto = ['BTC', 'ETH', 'SOL'].includes(upperSymbol);
+          const isCrypto = ['BTC', 'ETH', 'SOL'].includes(symbol);
           const newAsset = await prisma.asset.create({
             data: {
-              symbol: upperSymbol,
-              name: `${upperSymbol} Stock`,
+              symbol,
+              name: `${symbol} Stock`,
               type: isCrypto ? AssetType.CRYPTO : AssetType.STOCK,
             },
           });
           assetsList.push(newAsset);
           found = newAsset;
         }
-        assetId = found.id;
+        resolvedAssetId = found.id;
       }
 
-      // Run baseline normalization (places placeholder allocations)
-      const mockAllocations = [{ ownerId: input.defaultOwnerId, percentage: 1.0 }];
-      const norm = normalizeRobinhoodRow(row, {
-        accountId: resolvedAccountId,
-        defaultAllocations: mockAllocations,
-        assetLookup: (sym) => assetsList.find((a) => a.symbol === sym.toUpperCase().trim()),
+      // 2. Check for duplicates (against DB and already-staged batch rows)
+      const isDbDuplicate = dbTransactions.some((dtx) => {
+        const dateMatch = dtx.tradeDate.toISOString().slice(0, 10) === tx.tradeDate.slice(0, 10);
+        const typeMatch = dtx.type === tx.type;
+        const amountMatch = Math.abs(Number(dtx.grossAmount) - tx.grossAmount) < 1e-2;
+        const assetMatch = resolvedAssetId ? dtx.assetId === resolvedAssetId : !dtx.assetId;
+        
+        let qtyMatch = false;
+        if (tx.type === 'DEPOSIT' || tx.type === 'WITHDRAWAL') {
+          // Cash flows check amounts and date, but skip quantity checks (since DB stores units, preview stores 0)
+          qtyMatch = true;
+        } else if (tx.type === 'SPLIT') {
+          // Splits check date, type, asset and ignore dynamic split ratio quantities
+          qtyMatch = true;
+        } else {
+          qtyMatch = tx.quantity 
+            ? (dtx.quantity != null && Math.abs(Number(dtx.quantity) - tx.quantity) < 1e-5)
+            : !dtx.quantity;
+        }
+
+        return dateMatch && typeMatch && amountMatch && assetMatch && qtyMatch;
       });
 
-      if (!norm) {
-        skippedCount++;
-        continue;
-      }
+      const isBatchDuplicate = toCommit.some((btx) => {
+        const dateMatch = btx.tradeDate.slice(0, 10) === tx.tradeDate.slice(0, 10);
+        const typeMatch = btx.type === tx.type;
+        const amountMatch = Math.abs(btx.grossAmount - tx.grossAmount) < 1e-2;
+        const assetMatch = resolvedAssetId ? btx.assetId === resolvedAssetId : !btx.assetId;
 
-      if (assetId) {
-        norm.assetId = assetId;
-      }
+        let qtyMatch = false;
+        if (tx.type === 'DEPOSIT' || tx.type === 'WITHDRAWAL') {
+          qtyMatch = true;
+        } else if (tx.type === 'SPLIT') {
+          qtyMatch = true;
+        } else {
+          qtyMatch = tx.quantity
+            ? (btx.quantity != null && Math.abs(btx.quantity - tx.quantity) < 1e-5)
+            : !btx.quantity;
+        }
 
-      // Check for duplicates:
-      // 1. Against DB
-      const isDbDuplicate = dbTransactions.some(
-        (dtx) =>
-          dtx.tradeDate.toISOString() === norm.tradeDate &&
-          dtx.assetId === norm.assetId &&
-          dtx.type === norm.type &&
-          Number(dtx.grossAmount) === norm.grossAmount &&
-          (dtx.quantity ? Number(dtx.quantity) : null) === (norm.quantity ?? null)
-      );
-
-      // 2. Against currently staged transactions in this batch
-      const isBatchDuplicate = toCommit.some(
-        (btx) =>
-          btx.tradeDate === norm.tradeDate &&
-          btx.assetId === norm.assetId &&
-          btx.type === norm.type &&
-          btx.grossAmount === norm.grossAmount &&
-          (btx.quantity ?? null) === (norm.quantity ?? null)
-      );
+        return dateMatch && typeMatch && amountMatch && assetMatch && qtyMatch;
+      });
 
       if (isDbDuplicate || isBatchDuplicate) {
         skippedCount++;
         continue;
       }
 
-      // Dynamic Allocation Injection:
-      // Gather all chronological transactions prior to this trade date
-      const targetDate = new Date(norm.tradeDate);
+      // 3. Collect chronological running context up to target date
+      const targetDate = new Date(tx.tradeDate);
       const priorTxs = runningTxs.filter((rtx) => new Date(rtx.tradeDate) <= targetDate);
 
-      // Dynamic SPLIT handling: compute split ratio from prior transactions
-      if (norm.type === 'SPLIT' && symbolKey) {
-        const symbol = symbolKey.toUpperCase().trim();
+      // Handle stock splits: calculate split ratio from ledger history
+      let resolvedQuantity = tx.quantity;
+      if (tx.type === 'SPLIT' && tx.assetSymbol) {
+        const symbol = tx.assetSymbol.toUpperCase().trim();
         let preSplitQty = 0;
         for (const rtx of priorTxs) {
           if (rtx.assetSymbol?.toUpperCase() === symbol) {
@@ -166,66 +189,77 @@ export async function POST(request: Request) {
             }
           }
         }
-        const additionalQty = norm.quantity ?? 0;
+        const additionalQty = tx.quantity ?? 0;
         const splitRatio = preSplitQty <= 0 ? 1.0 : (preSplitQty + additionalQty) / preSplitQty;
-        norm.quantity = splitRatio;
+        resolvedQuantity = splitRatio;
       }
 
       let allocations: any[] = [];
 
-      if (norm.type === 'DEPOSIT' || norm.type === 'WITHDRAWAL') {
-        // Cash deposit/withdrawal: 100% to selected default owner, compute units issued
-        // Simulated prices at date (fall back to $1)
-        const prices: Record<string, number> = { USD: 1 };
+      // 4. Calculate Cash Flow allocations with dynamic pool pricing
+      if (tx.type === 'DEPOSIT' || tx.type === 'WITHDRAWAL') {
+        const prices: Record<string, number> = { USD: 1.0 };
         for (const rtx of priorTxs) {
           if (rtx.assetSymbol && !prices[rtx.assetSymbol]) {
-            prices[rtx.assetSymbol] = rtx.price ?? 1; // simple fallback close price representation
+            prices[rtx.assetSymbol] = rtx.price ?? 1.0;
           }
         }
 
         const portfolioValue = calculatePortfolioValue(priorTxs, prices);
         const totalUnits = calculateTotalUnits(priorTxs);
         const navpu = totalUnits <= 0 ? 1.0 : portfolioValue / totalUnits;
-        const unitsIssued = norm.grossAmount / navpu;
 
-        allocations = [{
-          ownerId: input.defaultOwnerId,
-          percentage: 1.0,
-          amount: norm.grossAmount,
-          quantity: unitsIssued,
-        }];
-      } else {
-        // Trade / Fee / Dividend / Split: Belongs to the pool as a whole, so no partner allocations are stored
-        allocations = [];
+        // Deposits issue units; withdrawals redeem units
+        const sign = tx.type === 'DEPOSIT' ? 1.0 : -1.0;
+        const unitsIssued = (tx.grossAmount * sign) / navpu;
+
+        // Fallback to first owner if client sent no allocations
+        const selectedOwnerId = tx.allocations[0]?.ownerId || owners[0]?.id || 'partner-1';
+
+        allocations = [
+          {
+            ownerId: selectedOwnerId,
+            percentage: 1.0,
+            amount: tx.grossAmount * sign,
+            quantity: unitsIssued,
+          },
+        ];
       }
 
       const finalizedTx = {
-        ...norm,
+        accountId: resolvedAccountId,
+        assetId: resolvedAssetId ?? null,
+        type: tx.type,
+        tradeDate: tx.tradeDate,
+        quantity: resolvedQuantity ?? null,
+        price: tx.price ?? null,
+        grossAmount: tx.grossAmount,
+        fee: tx.fee ?? 0,
         allocations,
       };
 
       toCommit.push(finalizedTx);
 
-      // Append transaction to our chronological calculation stream so subsequent trades compute correctly
-      const assetSymbol = assetsList.find((a) => a.id === norm.assetId)?.symbol;
-      runningTxs.push(toInputTx({
-        id: norm.id,
-        type: norm.type,
-        tradeDate: new Date(norm.tradeDate),
-        assetId: norm.assetId,
-        quantity: norm.quantity,
-        price: norm.price,
-        grossAmount: norm.grossAmount,
-        fee: norm.fee,
+      // Append transaction to chronological computation context
+      const assetSymbol = tx.assetSymbol ?? undefined;
+      runningTxs.push({
+        id: tx.id,
+        type: tx.type as any,
+        tradeDate: tx.tradeDate,
+        assetId: resolvedAssetId ?? undefined,
+        assetSymbol: assetSymbol ?? null,
+        quantity: resolvedQuantity ?? null,
+        price: tx.price ?? null,
+        grossAmount: tx.grossAmount,
+        fee: tx.fee ?? 0,
         allocations: allocations.map((a) => ({
           ownerId: a.ownerId,
-          percentage: new Prisma.Decimal(a.percentage),
-          amount: new Prisma.Decimal(a.amount),
-          quantity: a.quantity ? new Prisma.Decimal(a.quantity) : null,
+          percentage: a.percentage,
+          amount: a.amount,
+          quantity: a.quantity ?? null,
         })),
-      }, assetSymbol));
+      });
 
-      // Re-sort chronological pool context
       runningTxs.sort((a, b) => new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime());
     }
 
@@ -237,7 +271,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. Commit all staged transactions inside a Prisma transaction
+    // 5. Commit batch to DB inside a single Prisma Transaction block
     const batch = await prisma.importBatch.create({
       data: {
         source: 'robinhood',
@@ -250,7 +284,7 @@ export async function POST(request: Request) {
       toCommit.map((tx) =>
         prisma.transaction.create({
           data: {
-            accountId: resolvedAccountId,
+            accountId: tx.accountId,
             assetId: tx.assetId,
             type: tx.type,
             tradeDate: new Date(tx.tradeDate),

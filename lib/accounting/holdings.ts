@@ -1,3 +1,9 @@
+/**
+ * @file holdings.ts
+ * @description Core accounting module to calculate asset holdings at the pool level
+ * and distribute them dynamically to partners based on current pool units shares.
+ */
+
 import type { HoldingSummary, LedgerTransaction, PriceMap } from '@/lib/types/domain';
 import { calculateNetCash, getOwnerShares } from './pool';
 
@@ -12,22 +18,31 @@ function key(ownerId: string, assetId: string): string {
   return `${ownerId}::${assetId}`;
 }
 
+/**
+ * Safely calculates division ratio, returning null if denominator is zero.
+ * 
+ * @param numerator The numerator.
+ * @param denominator The denominator.
+ * @returns The division result or null.
+ */
 function safePct(numerator: number, denominator: number): number | null {
   if (denominator === 0) return null;
   return numerator / denominator;
 }
 
-/**
- * Computes current owner-level holdings from normalized ledger transactions.
- * V1 assumption: weighted average cost basis for summary views.
- * Lot-level FIFO lives separately in lots.ts.
- */
 interface PoolPosition {
   assetId: string;
   quantity: number;
   costBasis: number;
 }
 
+/**
+ * Computes pool-level asset positions chronologically from ledger transactions.
+ * Calculates cumulative quantities and adjusts cost basis for buys, sells, and splits.
+ * 
+ * @param transactions Sorted array of chronological transactions.
+ * @returns Array of pool positions.
+ */
 export function computePoolHoldings(transactions: LedgerTransaction[]): PoolPosition[] {
   const positions = new Map<string, PoolPosition>();
   const sorted = [...transactions].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
@@ -83,7 +98,13 @@ export function computePoolHoldings(transactions: LedgerTransaction[]): PoolPosi
 
 /**
  * Computes current owner-level holdings from normalized ledger transactions.
- * Calculates pool-level positions and distributes them based on owner pool shares.
+ * Resolves pool-level positions and allocates them based on current owner shares.
+ * 
+ * @param transactions Chronological list of ledger transactions.
+ * @param prices Current prices mapped by asset ID.
+ * @param ownerIds Optional array of active owner IDs.
+ * @param usdAssetId Optional asset ID representing cash (USD).
+ * @returns Array of holding summaries per owner and asset.
  */
 export function computeHoldings(
   transactions: LedgerTransaction[],
@@ -144,6 +165,12 @@ export function computeHoldings(
   return list;
 }
 
+/**
+ * Summarizes holdings by owner, summing market value, cost basis, and gain/loss.
+ * 
+ * @param holdings Array of individual holding summaries.
+ * @returns Summarized metrics for each owner.
+ */
 export function summarizeByOwner(holdings: HoldingSummary[]) {
   const rows = new Map<string, { ownerId: string; marketValue: number; costBasis: number; unrealizedGainLoss: number }>();
 
