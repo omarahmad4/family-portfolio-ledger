@@ -68,7 +68,7 @@ export class YahooFinanceMarketDataProvider implements MarketDataProvider {
     // 3. Cache Miss - Query Yahoo Finance Quote
     let latestPrice: number;
     try {
-      const quote = await yahooFinance.quote(normalized);
+      const quote = await yahooFinance.quote(normalized, {}, { validateResult: false }) as any;
       const price = quote.regularMarketPrice ?? quote.regularMarketPreviousClose;
       if (price == null) {
         throw new Error(`No quote price returned from Yahoo Finance for ${normalized}`);
@@ -147,10 +147,14 @@ export class YahooFinanceMarketDataProvider implements MarketDataProvider {
 
     let historicalClose: number | null = null;
     try {
-      const result = await yahooFinance.historical(normalized, {
-        period1: startDate.toISOString().split('T')[0],
-        period2: endDate.toISOString().split('T')[0],
-      });
+      const result = await yahooFinance.historical(
+        normalized,
+        {
+          period1: startDate.toISOString().split('T')[0],
+          period2: endDate.toISOString().split('T')[0],
+        },
+        { validateResult: false }
+      ) as any;
 
       if (result && result.length > 0) {
         // Grab the first available price inside our target window
