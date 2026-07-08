@@ -24,7 +24,8 @@ export interface MarketDataProvider {
  * E.g., crypto assets BTC and ETH are mapped to BTC-USD and ETH-USD.
  */
 export function normalizeSymbol(symbol: string): string {
-  const upper = symbol.toUpperCase().trim();
+  let upper = symbol.toUpperCase().trim();
+  upper = upper.replace(/\./g, '-');
   if (upper === 'BTC' || upper === 'ETH') {
     return `${upper}-USD`;
   }

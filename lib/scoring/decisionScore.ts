@@ -79,12 +79,30 @@ export async function scoreTransactionDecision(
 
   // 2. Fetch prices at buy date
   const assetPriceBuy = tx.price ?? (tx.grossAmount / (tx.quantity ?? 1));
-  const benchmarkClose = await provider.getHistoricalClose(benchmark.toString(), buyDate);
-  const benchmarkPriceBuy = benchmarkClose ? benchmarkClose.close : 1.0;
+  let benchmarkPriceBuy = 1.0;
+  try {
+    const benchmarkClose = await provider.getHistoricalClose(benchmark.toString(), buyDate);
+    benchmarkPriceBuy = benchmarkClose ? benchmarkClose.close : 1.0;
+  } catch (err) {
+    console.warn(`Could not fetch historical benchmark price for ${benchmark} on date ${buyDate}`, err);
+  }
 
   // 3. Fetch latest current prices
-  const assetPriceCurrent = await provider.getLatestPrice(assetSymbol);
-  const benchmarkPriceCurrent = await provider.getLatestPrice(benchmark.toString());
+  let assetPriceCurrent = 0.0;
+  try {
+    assetPriceCurrent = await provider.getLatestPrice(assetSymbol);
+  } catch (err) {
+    console.warn(`Could not fetch latest price for ${assetSymbol}`, err);
+    assetPriceCurrent = assetPriceBuy; // Fallback to cost basis price to avoid calculations crash
+  }
+
+  let benchmarkPriceCurrent = 1.0;
+  try {
+    benchmarkPriceCurrent = await provider.getLatestPrice(benchmark.toString());
+  } catch (err) {
+    console.warn(`Could not fetch latest price for benchmark ${benchmark}`, err);
+    benchmarkPriceCurrent = benchmarkPriceBuy;
+  }
 
   let totalInvested = 0;
   let totalActualValue = 0;
@@ -100,7 +118,6 @@ export async function scoreTransactionDecision(
     totalActualValue += (valActive + valRealized);
 
     // B. Benchmark Equivalent Value
-    // Value of remaining benchmark units
     const unitsRemaining = lot.costBasis / benchmarkPriceBuy;
     const valBenchmarkActive = unitsRemaining * benchmarkPriceCurrent;
 
@@ -109,8 +126,15 @@ export async function scoreTransactionDecision(
     for (const sale of lot.sales) {
       // Find benchmark price on sell date
       const sellDate = sale.sellDate.split('T')[0];
-      const benchmarkCloseSell = await provider.getHistoricalClose(benchmark.toString(), sellDate);
-      const benchmarkPriceSell = benchmarkCloseSell ? benchmarkCloseSell.close : benchmarkPriceCurrent;
+      let benchmarkPriceSell = benchmarkPriceCurrent;
+      try {
+        const benchmarkCloseSell = await provider.getHistoricalClose(benchmark.toString(), sellDate);
+        if (benchmarkCloseSell) {
+          benchmarkPriceSell = benchmarkCloseSell.close;
+        }
+      } catch (err) {
+        console.warn(`Could not fetch historical benchmark price on sale date ${sellDate}`, err);
+      }
 
       const costBasisSold = sale.quantity * (lot.originalCostBasis / lot.originalQuantity);
       const unitsSold = costBasisSold / benchmarkPriceBuy;

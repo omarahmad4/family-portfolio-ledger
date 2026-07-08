@@ -41,6 +41,7 @@ test.describe('LedgerAlpha CSV Ingestion E2E Tests', () => {
       '2024-01-18,MISC,AAPL,,,3.00', // DIVIDEND
       '2024-01-19,CIL,AAPL,,,4.00', // DIVIDEND
       '2024-01-20,ACH,,0,,-500.00', // WITHDRAWAL
+      '2024-01-21,Buy,BRK.B,1,350.00,-350.00', // BUY BRK.B
     ].join('\n');
 
     const textarea = page.getByTestId('csv-textarea');
@@ -79,6 +80,6 @@ test.describe('LedgerAlpha CSV Ingestion E2E Tests', () => {
     await commitBtn.click();
 
     // Should indicate that all rows were duplicates/skipped
-    await expect(page.locator('.form-message')).toContainText('skipped 20 duplicates');
+    await expect(page.locator('.form-message')).toContainText('skipped 21 duplicates');
   });
 });
