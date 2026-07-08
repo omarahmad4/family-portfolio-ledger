@@ -40,7 +40,7 @@ export class YahooFinanceMarketDataProvider implements MarketDataProvider {
     const upperSymbol = symbol.toUpperCase().trim();
 
     // 1. Resolve Asset ID
-    const asset = await prisma.asset.findUnique({
+    const asset = await prisma.asset.findFirst({
       where: { symbol: upperSymbol },
     });
     if (!asset) {
@@ -115,7 +115,7 @@ export class YahooFinanceMarketDataProvider implements MarketDataProvider {
     const targetDate = new Date(`${date}T00:00:00.000Z`);
 
     // 1. Resolve Asset ID
-    const asset = await prisma.asset.findUnique({
+    const asset = await prisma.asset.findFirst({
       where: { symbol: upperSymbol },
     });
     if (!asset) {
