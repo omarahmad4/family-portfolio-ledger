@@ -8,6 +8,7 @@ import type { PriceMap } from '@/lib/types/domain';
 import { prisma } from '@/lib/db/prisma';
 import { calculateTotalUnits } from '@/lib/accounting/pool';
 import type { TransactionInput } from '@/lib/accounting/pool';
+import yahooFinance from 'yahoo-finance2';
 
 export async function getPortfolioAnalytics() {
   const [owners, assets, transactions] = await Promise.all([
@@ -113,6 +114,19 @@ function toInputTx(tx: any, symbol?: string | null): TransactionInput {
   };
 }
 
+function getHistoricalPriceInmemory(
+  pricesArray: { dateStr: string; price: number }[] | undefined,
+  targetDateStr: string
+): number {
+  if (!pricesArray || pricesArray.length === 0) return 0;
+  for (let i = pricesArray.length - 1; i >= 0; i--) {
+    if (pricesArray[i].dateStr <= targetDateStr) {
+      return pricesArray[i].price;
+    }
+  }
+  return pricesArray[0].price;
+}
+
 export async function getPerformanceChartData(): Promise<any[]> {
   const transactions = await prisma.transaction.findMany({
     include: { allocations: true, asset: true },
@@ -121,13 +135,87 @@ export async function getPerformanceChartData(): Promise<any[]> {
 
   if (transactions.length === 0) return [];
 
-  const provider = new YahooFinanceMarketDataProvider();
+  // Ensure SPY benchmark asset exists in database
+  let spyAsset = await prisma.asset.findFirst({ where: { symbol: 'SPY' } });
+  if (!spyAsset) {
+    spyAsset = await prisma.asset.create({
+      data: { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', type: 'STOCK' }
+    });
+  }
+
   const assets = await prisma.asset.findMany();
   const usdAssetId = assets.find((a) => a.symbol === 'USD')?.id;
   const owners = await prisma.owner.findMany();
   const ownerIds = owners.map((o) => o.id);
 
-  // Collect chronological unique month-end dates + inception
+  // Collect all unique asset symbols including SPY (excluding USD)
+  const symbols = Array.from(new Set(assets.map((a) => a.symbol).filter((s) => s !== 'USD')));
+  if (!symbols.includes('SPY')) {
+    symbols.push('SPY');
+  }
+
+  const assetMap = new Map(assets.map((a) => [a.symbol, a.id]));
+  if (!assetMap.has('SPY')) {
+    assetMap.set('SPY', spyAsset.id);
+  }
+
+  // Preload historical prices from Yahoo Finance in single range queries if missing
+  for (const sym of symbols) {
+    const assetId = assetMap.get(sym)!;
+    const count = await prisma.price.count({
+      where: { assetId, source: 'yahoo-historical' }
+    });
+
+    if (count === 0) {
+      const normalized = sym.replace('.', '-');
+      try {
+        const result = await yahooFinance.historical(
+          normalized,
+          {
+            period1: '2020-01-01',
+            period2: new Date().toISOString().split('T')[0],
+          },
+          { validateResult: false }
+        ) as any;
+
+        if (result && result.length > 0) {
+          const priceData = result.map((p: any) => ({
+            assetId,
+            date: new Date(p.date.toISOString().slice(0, 10) + 'T00:00:00.000Z'),
+            close: Number(p.close ?? p.adjClose ?? 0),
+            source: 'yahoo-historical',
+          })).filter((p: any) => p.close > 0);
+
+          await prisma.price.createMany({
+            data: priceData,
+            skipDuplicates: true,
+          });
+        }
+      } catch (err) {
+        console.error(`Failed to preload historical prices for ${sym}`, err);
+      }
+    }
+  }
+
+  // Retrieve all preloaded prices for assets in scope
+  const allPrices = await prisma.price.findMany({
+    where: { assetId: { in: Array.from(assetMap.values()) }, source: 'yahoo-historical' },
+    orderBy: { date: 'asc' },
+  });
+
+  // Build in-memory lookup table
+  const inMemoryPrices = new Map<string, { dateStr: string; price: number }[]>();
+  for (const p of allPrices) {
+    if (!inMemoryPrices.has(p.assetId)) {
+      inMemoryPrices.set(p.assetId, []);
+    }
+    inMemoryPrices.get(p.assetId)!.push({
+      dateStr: p.date.toISOString().slice(0, 10),
+      price: Number(p.close),
+    });
+  }
+
+  // Collect unique chronological dates to evaluate performance
   const datePoints: string[] = [];
   const firstTxDate = transactions[0].tradeDate.toISOString().slice(0, 10);
   datePoints.push(firstTxDate);
@@ -165,36 +253,25 @@ export async function getPerformanceChartData(): Promise<any[]> {
 
     if (txsUpToDate.length === 0) continue;
 
+    // Resolve prices in-memory for all assets (no database queries inside loop)
     const prices: Record<string, number> = {};
-    await Promise.all(
-      assets.map(async (asset) => {
-        if (asset.symbol === 'USD') {
-          prices[asset.id] = 1.0;
-        } else {
-          try {
-            const hist = await provider.getHistoricalClose(asset.symbol, dateStr);
-            prices[asset.id] = hist ? hist.close : 0.0;
-          } catch {
-            prices[asset.id] = 0.0;
-          }
-        }
-      })
-    );
+    for (const asset of assets) {
+      if (asset.symbol === 'USD') {
+        prices[asset.id] = 1.0;
+      } else {
+        prices[asset.id] = getHistoricalPriceInmemory(inMemoryPrices.get(asset.id), dateStr);
+      }
+    }
 
     const holdings = computeHoldings(txsUpToDate as any, prices, ownerIds, usdAssetId);
     const totalVal = holdings.reduce((sum, h) => sum + h.marketValue, 0);
     const totalUnits = calculateTotalUnits(txsUpToDate);
     const navpu = totalUnits > 0 ? totalVal / totalUnits : 10.0;
 
-    let spyPrice = 1.0;
-    try {
-      const spyHist = await provider.getHistoricalClose('SPY', dateStr);
-      spyPrice = spyHist ? spyHist.close : 1.0;
-    } catch {
-      spyPrice = 1.0;
-    }
+    const spyAssetId = assetMap.get('SPY')!;
+    const spyPrice = getHistoricalPriceInmemory(inMemoryPrices.get(spyAssetId), dateStr);
 
-    if (!inceptionResolved) {
+    if (!inceptionResolved && navpu > 0 && spyPrice > 0) {
       navpu_0 = navpu;
       spy_0 = spyPrice;
       inceptionResolved = true;

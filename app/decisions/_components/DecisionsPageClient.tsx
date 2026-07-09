@@ -9,23 +9,13 @@
 import React, { useState } from 'react';
 import { money, number, pct } from '@/lib/format';
 import { useSortableData, SortableHeader } from '@/components/tables/SortableTable';
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-} from 'recharts';
+import { Tooltip } from '@/components/Tooltip';
 
 interface DecisionsPageClientProps {
   initialDecisionRows: any[];
-  performanceChartData: any[];
 }
 
-export function DecisionsPageClient({ initialDecisionRows, performanceChartData }: DecisionsPageClientProps) {
+export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClientProps) {
   const [hideReinvestments, setHideReinvestments] = useState(true);
   const [hideClosed, setHideClosed] = useState(false);
   const [weightMode, setWeightMode] = useState<'unweighted' | 'weighted'>('unweighted');
@@ -96,19 +86,28 @@ export function DecisionsPageClient({ initialDecisionRows, performanceChartData 
       {/* Decision KPIs */}
       <section className="grid" style={{ marginBottom: 20 }}>
         <div className="card">
-          <h3>Average Portfolio Grade</h3>
+          <h3 style={{ display: 'flex', alignItems: 'center' }}>
+            Average Portfolio Grade
+            <Tooltip text="The capital-weighted GPA of your buy decisions (A=4.00, B=3.00, C=2.00, D=1.00, F=0.00). Staged cost determines the weight." />
+          </h3>
           <div className="metric" style={{ color: avgGPA >= 2.5 ? '#10b981' : '#fde68a' }}>
             {avgGPA.toFixed(2)} / 4.00 <span style={{ fontSize: '18px', fontWeight: 500 }}>({getLetterGPA(avgGPA)})</span>
           </div>
         </div>
         <div className="card">
-          <h3>Alpha Beat Rate</h3>
+          <h3 style={{ display: 'flex', alignItems: 'center' }}>
+            Alpha Beat Rate
+            <Tooltip text="The percentage of your investment cohorts (or capital, if weighted) that outperformed the S&P 500 (SPY) benchmark index." />
+          </h3>
           <div className="metric" style={{ color: beatRate >= 0.5 ? '#10b981' : '#f59e0b' }}>
             {pct(beatRate)} <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 400 }}>of {weightMode === 'weighted' ? 'capital outperforms' : 'cohorts outperform'} SPY</span>
           </div>
         </div>
         <div className="card">
-          <h3>Average Excess Return (Alpha)</h3>
+          <h3 style={{ display: 'flex', alignItems: 'center' }}>
+            Average Excess Return (Alpha)
+            <Tooltip text="The average percentage return of your investment cohorts minus the S&P 500's return over the same holding periods." />
+          </h3>
           <div className={`metric ${overallAlpha >= 0 ? 'positive' : 'negative'}`}>
             {overallAlpha >= 0 ? '+' : ''}{pct(overallAlpha)}
           </div>
@@ -204,66 +203,6 @@ export function DecisionsPageClient({ initialDecisionRows, performanceChartData 
               })}
             </tbody>
           </table>
-        )}
-      </section>
-
-      {/* Historical Performance Line Chart */}
-      <section className="card" style={{ marginTop: 24 }}>
-        <h3 style={{ marginTop: 0, marginBottom: 6 }}>Historical Performance vs S&P 500</h3>
-        <p style={{ color: 'var(--muted)', fontSize: '13px', marginTop: 0, marginBottom: 20 }}>
-          Compares the time-weighted cumulative growth of the portfolio (NAV per Unit) against the S&P 500 (SPY).
-        </p>
-
-        {performanceChartData.length === 0 ? (
-          <div className="empty-state" style={{ textAlign: 'center', padding: '40px 0' }}>
-            No performance history available. Import transactions to populate performance data.
-          </div>
-        ) : (
-          <div style={{ width: '100%', height: 350 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={performanceChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="#64748b" 
-                  fontSize={11} 
-                  tickLine={false} 
-                  axisLine={false} 
-                />
-                <YAxis 
-                  stroke="#64748b" 
-                  fontSize={11} 
-                  tickLine={false} 
-                  axisLine={false} 
-                  tickFormatter={(val) => `${val.toFixed(0)}%`} 
-                />
-                <Tooltip 
-                  contentStyle={{ background: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} 
-                  labelStyle={{ fontWeight: 600, color: '#cbd5e1' }}
-                  formatter={(val: number) => [`${val.toFixed(2)}%`]}
-                />
-                <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: 13 }} />
-                <Line 
-                  type="monotone" 
-                  dataKey="portfolioReturn" 
-                  name="Portfolio Return (NAVPU)" 
-                  stroke="#38bdf8" 
-                  strokeWidth={2.5} 
-                  dot={{ r: 4, stroke: '#38bdf8', strokeWidth: 1, fill: '#0f172a' }}
-                  activeDot={{ r: 6 }} 
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="spyReturn" 
-                  name="S&P 500 Index (SPY)" 
-                  stroke="#94a3b8" 
-                  strokeWidth={1.5} 
-                  strokeDasharray="4 4"
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
         )}
       </section>
     </>

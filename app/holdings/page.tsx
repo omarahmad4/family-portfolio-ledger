@@ -1,9 +1,12 @@
-import { getPortfolioAnalytics } from '@/lib/data/analytics';
+import { getPortfolioAnalytics, getPerformanceChartData } from '@/lib/data/analytics';
 import { calculateOwnerUnits, calculateTotalUnits } from '@/lib/accounting/pool';
 import { HoldingsPageClient } from './_components/HoldingsPageClient';
 
 export default async function HoldingsPage() {
-  const analytics = await getPortfolioAnalytics();
+  const [analytics, chartData] = await Promise.all([
+    getPortfolioAnalytics(),
+    getPerformanceChartData(),
+  ]);
 
   const totalUnits = calculateTotalUnits(analytics.transactions as any);
   const ownerUnitsMap = calculateOwnerUnits(analytics.transactions as any);
@@ -23,6 +26,7 @@ export default async function HoldingsPage() {
         assets={analytics.assets}
         totalUnits={totalUnits}
         ownerUnitsMap={ownerUnitsMap}
+        performanceChartData={chartData}
       />
     </>
   );

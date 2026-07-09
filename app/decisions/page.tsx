@@ -1,11 +1,8 @@
-import { getPortfolioAnalytics, getPerformanceChartData } from '@/lib/data/analytics';
+import { getPortfolioAnalytics } from '@/lib/data/analytics';
 import { DecisionsPageClient } from './_components/DecisionsPageClient';
 
 export default async function DecisionsPage() {
-  const [analytics, chartData] = await Promise.all([
-    getPortfolioAnalytics(),
-    getPerformanceChartData(),
-  ]);
+  const analytics = await getPortfolioAnalytics();
 
   return (
     <>
@@ -16,7 +13,6 @@ export default async function DecisionsPage() {
 
       <DecisionsPageClient 
         initialDecisionRows={analytics.decisionRows} 
-        performanceChartData={chartData}
       />
     </>
   );

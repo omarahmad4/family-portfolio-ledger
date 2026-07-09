@@ -9,6 +9,17 @@
 import React, { useState, useMemo } from 'react';
 import { money, number, pct, signedMoney } from '@/lib/format';
 import { useSortableData, SortableHeader } from '@/components/tables/SortableTable';
+import { Tooltip as InfoTooltip } from '@/components/Tooltip';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+} from 'recharts';
 
 interface OwnerHoldingsTableProps {
   ownerHoldings: any[];
@@ -111,6 +122,7 @@ interface HoldingsPageClientProps {
   assets: any[];
   totalUnits: number;
   ownerUnitsMap: Record<string, number>;
+  performanceChartData: any[];
 }
 
 export function HoldingsPageClient({
@@ -121,6 +133,7 @@ export function HoldingsPageClient({
   assets,
   totalUnits,
   ownerUnitsMap,
+  performanceChartData,
 }: HoldingsPageClientProps) {
   const [viewMode, setViewMode] = useState<'partner' | 'portfolio'>('partner');
   const assetById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
@@ -197,6 +210,69 @@ export function HoldingsPageClient({
         </button>
       </div>
 
+      {/* Historical Performance Line Chart at the Top of Holdings Page */}
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h3 style={{ marginTop: 0, marginBottom: 6, display: 'flex', alignItems: 'center' }}>
+          Historical Performance vs S&P 500
+          <InfoTooltip text="Compares the time-weighted cumulative growth of the portfolio (NAV per Unit) against the S&P 500 (SPY). This tracks true asset performance and cash drag independent of partner deposit/withdrawal timing." />
+        </h3>
+        <p style={{ color: 'var(--muted)', fontSize: '13px', marginTop: 0, marginBottom: 20 }}>
+          Compares the time-weighted cumulative growth of the portfolio (NAV per Unit) against the S&P 500 (SPY).
+        </p>
+
+        {performanceChartData.length === 0 ? (
+          <div className="empty-state" style={{ textAlign: 'center', padding: '40px 0' }}>
+            No performance history available. Import transactions to populate performance data.
+          </div>
+        ) : (
+          <div style={{ width: '100%', height: 320 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={performanceChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="#64748b" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                />
+                <YAxis 
+                  stroke="#64748b" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tickFormatter={(val) => `${val.toFixed(0)}%`} 
+                />
+                <RechartsTooltip 
+                  contentStyle={{ background: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} 
+                  labelStyle={{ fontWeight: 600, color: '#cbd5e1' }}
+                  formatter={(val: number) => [`${val.toFixed(2)}%`]}
+                />
+                <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: 13 }} />
+                <Line 
+                  type="monotone" 
+                  dataKey="portfolioReturn" 
+                  name="Portfolio Return (NAVPU)" 
+                  stroke="#38bdf8" 
+                  strokeWidth={2.5} 
+                  dot={{ r: 4, stroke: '#38bdf8', strokeWidth: 1, fill: '#0f172a' }}
+                  activeDot={{ r: 6 }} 
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="spyReturn" 
+                  name="S&P 500 Index (SPY)" 
+                  stroke="#94a3b8" 
+                  strokeWidth={1.5} 
+                  strokeDasharray="4 4"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
       {viewMode === 'partner' ? (
         /* 1. Partner Breakdown View Mode */
         owners.map((owner) => {
@@ -221,8 +297,9 @@ export function HoldingsPageClient({
                   <h3 style={{ margin: 0, fontSize: '20px', color: 'var(--text)', fontWeight: 700 }}>
                     {owner.name}&apos;s Ledger Portfolio
                   </h3>
-                  <span style={{ fontSize: '13px', color: 'var(--muted)' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                     Holds {number(unitsOwned)} pool units ({(netWorthShare * 100).toFixed(2)}% net worth share)
+                    <InfoTooltip text="Pool units represent your ownership shares of the pool. Net worth share is your percentage of total fund assets (units owned / total pool units). Unit value is calculated as NAVPU (Net Asset Value per Unit)." />
                   </span>
                 </div>
                 <div style={{ textAlign: 'right' }}>
