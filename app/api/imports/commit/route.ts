@@ -240,6 +240,13 @@ export async function POST(request: Request) {
             quantity: unitsIssued,
           },
         ];
+      } else {
+        allocations = tx.allocations.map((a: any) => ({
+          ownerId: a.ownerId,
+          percentage: a.percentage,
+          amount: a.amount,
+          quantity: a.quantity ?? (resolvedQuantity != null ? resolvedQuantity * a.percentage : null),
+        }));
       }
 
       const finalizedTx = {

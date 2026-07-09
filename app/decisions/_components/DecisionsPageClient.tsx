@@ -126,7 +126,7 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
                       </span>
                     </td>
                     <td style={{ fontWeight: 600 }}>{row.symbol}</td>
-                    <td>{new Date(row.tradeDate).toLocaleDateString()}</td>
+                    <td suppressHydrationWarning>{new Date(row.tradeDate).toLocaleDateString()}</td>
                     <td>{number(row.quantity)}</td>
                     <td>{money(invested)}</td>
                     <td style={{ fontWeight: 500 }}>{money(actualVal)}</td>

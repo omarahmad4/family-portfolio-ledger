@@ -67,7 +67,7 @@ export function TransactionsListClient({ transactions }: TransactionsListClientP
       <tbody>
         {sortedRows.map((tx) => (
           <tr key={tx.id}>
-            <td>{new Date(tx.tradeDate).toLocaleDateString()}</td>
+            <td suppressHydrationWarning>{new Date(tx.tradeDate).toLocaleDateString()}</td>
             <td>{tx.type}</td>
             <td>{tx.assetSymbol}</td>
             <td>{tx.parsedQty == null ? '—' : number(tx.parsedQty)}</td>
