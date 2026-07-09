@@ -9,22 +9,38 @@
 import React, { useState } from 'react';
 import { money, number, pct } from '@/lib/format';
 import { useSortableData, SortableHeader } from '@/components/tables/SortableTable';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts';
 
 interface DecisionsPageClientProps {
   initialDecisionRows: any[];
+  performanceChartData: any[];
 }
 
-export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClientProps) {
+export function DecisionsPageClient({ initialDecisionRows, performanceChartData }: DecisionsPageClientProps) {
   const [hideReinvestments, setHideReinvestments] = useState(true);
+  const [hideClosed, setHideClosed] = useState(false);
   const [weightMode, setWeightMode] = useState<'unweighted' | 'weighted'>('unweighted');
 
-  // 1. Filter out dividend reinvestments if toggled
+  // 1. Filter out dividend reinvestments and/or closed decisions if toggled
   const filteredRows = React.useMemo(() => {
-    if (!hideReinvestments) return initialDecisionRows;
-    return initialDecisionRows.filter(
-      (row) => row.notes !== 'Dividend Reinvestment'
-    );
-  }, [initialDecisionRows, hideReinvestments]);
+    let rows = initialDecisionRows;
+    if (hideReinvestments) {
+      rows = rows.filter((row) => row.notes !== 'Dividend Reinvestment');
+    }
+    if (hideClosed) {
+      rows = rows.filter((row) => row.isActive);
+    }
+    return rows;
+  }, [initialDecisionRows, hideReinvestments, hideClosed]);
 
   // 2. Hook up sorting
   const { items: sortedRows, requestSort, sortConfig } = useSortableData(filteredRows, {
@@ -119,6 +135,15 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
             <label className="checkbox-row" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <input 
                 type="checkbox" 
+                checked={hideClosed} 
+                onChange={(e) => setHideClosed(e.target.checked)} 
+                data-testid="toggle-closed-decisions"
+              />
+              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Hide Closed Decisions</span>
+            </label>
+            <label className="checkbox-row" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input 
+                type="checkbox" 
                 checked={hideReinvestments} 
                 onChange={(e) => setHideReinvestments(e.target.checked)} 
                 data-testid="toggle-reinvestments"
@@ -179,6 +204,66 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
               })}
             </tbody>
           </table>
+        )}
+      </section>
+
+      {/* Historical Performance Line Chart */}
+      <section className="card" style={{ marginTop: 24 }}>
+        <h3 style={{ marginTop: 0, marginBottom: 6 }}>Historical Performance vs S&P 500</h3>
+        <p style={{ color: 'var(--muted)', fontSize: '13px', marginTop: 0, marginBottom: 20 }}>
+          Compares the time-weighted cumulative growth of the portfolio (NAV per Unit) against the S&P 500 (SPY).
+        </p>
+
+        {performanceChartData.length === 0 ? (
+          <div className="empty-state" style={{ textAlign: 'center', padding: '40px 0' }}>
+            No performance history available. Import transactions to populate performance data.
+          </div>
+        ) : (
+          <div style={{ width: '100%', height: 350 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={performanceChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="#64748b" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                />
+                <YAxis 
+                  stroke="#64748b" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tickFormatter={(val) => `${val.toFixed(0)}%`} 
+                />
+                <Tooltip 
+                  contentStyle={{ background: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} 
+                  labelStyle={{ fontWeight: 600, color: '#cbd5e1' }}
+                  formatter={(val: number) => [`${val.toFixed(2)}%`]}
+                />
+                <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: 13 }} />
+                <Line 
+                  type="monotone" 
+                  dataKey="portfolioReturn" 
+                  name="Portfolio Return (NAVPU)" 
+                  stroke="#38bdf8" 
+                  strokeWidth={2.5} 
+                  dot={{ r: 4, stroke: '#38bdf8', strokeWidth: 1, fill: '#0f172a' }}
+                  activeDot={{ r: 6 }} 
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="spyReturn" 
+                  name="S&P 500 Index (SPY)" 
+                  stroke="#94a3b8" 
+                  strokeWidth={1.5} 
+                  strokeDasharray="4 4"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </section>
     </>

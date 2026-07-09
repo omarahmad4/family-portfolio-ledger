@@ -112,42 +112,69 @@ export function computeHoldings(
   ownerIds?: string[],
   usdAssetId?: string
 ): HoldingSummary[] {
-  const poolHoldings = computePoolHoldings(transactions);
-  
   const resolvedOwnerIds = ownerIds ?? Array.from(new Set(transactions.flatMap((tx) => tx.allocations.map((a) => a.ownerId))));
-  const shares = getOwnerShares(transactions as any, resolvedOwnerIds);
-
   const list: HoldingSummary[] = [];
 
   for (const ownerId of resolvedOwnerIds) {
-    const share = shares[ownerId] ?? 0;
-    if (share <= 0) continue;
+    // 1. Filter and map transactions to represent ONLY this owner's allocated shares
+    const ownerTransactions: LedgerTransaction[] = [];
+    for (const tx of transactions) {
+      let allocation = tx.allocations?.find((a) => a.ownerId === ownerId);
+      
+      if (!allocation && (!tx.allocations || tx.allocations.length === 0)) {
+        // Fallback: if no allocations are defined for the transaction, split it dynamically based on unit shares at trade date
+        const sharesAtDate = getOwnerShares(transactions as any, resolvedOwnerIds, tx.tradeDate);
+        const pct = sharesAtDate[ownerId] ?? 0.0;
+        if (pct > 0) {
+          allocation = {
+            ownerId,
+            percentage: pct,
+            amount: tx.grossAmount * pct,
+            quantity: tx.quantity != null ? tx.quantity * pct : null,
+          } as any;
+        }
+      }
 
-    for (const ph of poolHoldings) {
-      const quantity = ph.quantity * share;
-      const costBasis = ph.costBasis * share;
-      const price = prices[ph.assetId] ?? 0;
-      const marketValue = quantity * price;
-      const unrealizedGainLoss = marketValue - costBasis;
+      if (allocation) {
+        const percentage = allocation.percentage;
+        
+        // Staged quantities and prices
+        const quantity = allocation.quantity ?? (tx.quantity != null ? tx.quantity * percentage : null);
+        const grossAmount = allocation.amount;
+        const fee = tx.fee != null ? tx.fee * percentage : 0;
+        
+        ownerTransactions.push({
+          ...tx,
+          quantity,
+          grossAmount,
+          fee,
+          allocations: [allocation],
+        });
+      }
+    }
+
+    // 2. Compute individual asset holdings from owner's allocated transactions
+    const ownerAssetHoldings = computePoolHoldings(ownerTransactions);
+
+    for (const oh of ownerAssetHoldings) {
+      const price = prices[oh.assetId] ?? 0;
+      const marketValue = oh.quantity * price;
+      const unrealizedGainLoss = marketValue - oh.costBasis;
 
       list.push({
         ownerId,
-        assetId: ph.assetId,
-        quantity,
-        costBasis,
+        assetId: oh.assetId,
+        quantity: oh.quantity,
+        costBasis: oh.costBasis,
         marketValue,
         unrealizedGainLoss,
-        unrealizedReturnPct: safePct(unrealizedGainLoss, costBasis),
+        unrealizedReturnPct: safePct(unrealizedGainLoss, oh.costBasis),
       });
     }
-  }
 
-  // Inject cash holdings if usdAssetId is provided
-  if (usdAssetId) {
-    const cashBalance = calculateNetCash(transactions as any);
-    for (const ownerId of resolvedOwnerIds) {
-      const share = shares[ownerId] ?? 0;
-      const ownerCash = share * cashBalance;
+    // 3. Inject individual cash holdings if usdAssetId is provided
+    if (usdAssetId) {
+      const ownerCash = calculateNetCash(ownerTransactions as any);
       if (Math.abs(ownerCash) > 1e-9) {
         list.push({
           ownerId,

@@ -6,11 +6,26 @@
 
 import { test, expect } from '@playwright/test';
 import { execSync } from 'child_process';
+import fs from 'fs';
 
 test.describe('LedgerAlpha CSV Ingestion E2E Tests', () => {
   test.beforeAll(async () => {
+    // Back up user dev database to prevent E2E seeds from overwriting actual uploaded data
+    if (fs.existsSync('prisma/dev.db.bak')) {
+      fs.copyFileSync('prisma/dev.db.bak', 'prisma/dev.db');
+    } else if (fs.existsSync('prisma/dev.db')) {
+      fs.copyFileSync('prisma/dev.db', 'prisma/dev.db.bak');
+    }
     // Reset database to seed baseline values before E2E testing
     execSync('npx tsx prisma/seed.ts', { stdio: 'ignore' });
+  });
+
+  test.afterAll(async () => {
+    // Restore user dev database
+    if (fs.existsSync('prisma/dev.db.bak')) {
+      fs.copyFileSync('prisma/dev.db.bak', 'prisma/dev.db');
+      fs.unlinkSync('prisma/dev.db.bak');
+    }
   });
 
   test('should handle raw CSV upload, per-cashflow partner assignment, and duplicate prevention', async ({ page }) => {

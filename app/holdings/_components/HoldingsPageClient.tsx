@@ -222,7 +222,7 @@ export function HoldingsPageClient({
                     {owner.name}&apos;s Ledger Portfolio
                   </h3>
                   <span style={{ fontSize: '13px', color: 'var(--muted)' }}>
-                    Holds {number(unitsOwned)} pool units ({pct(netWorthShare)} net worth share)
+                    Holds {number(unitsOwned)} pool units ({(netWorthShare * 100).toFixed(2)}% net worth share)
                   </span>
                 </div>
                 <div style={{ textAlign: 'right' }}>

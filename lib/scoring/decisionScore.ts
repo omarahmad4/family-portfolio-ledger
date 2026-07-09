@@ -151,6 +151,8 @@ export async function scoreTransactionDecision(
   const benchmarkReturnPct = pct(totalBenchmarkValue, totalInvested);
   const excessReturnPct = actualReturnPct - benchmarkReturnPct;
 
+  const isActive = matchingLots.some((lot) => lot.remainingQuantity > 1e-9);
+
   return {
     actualValue: totalActualValue,
     benchmarkValue: totalBenchmarkValue,
@@ -158,5 +160,6 @@ export async function scoreTransactionDecision(
     benchmarkReturnPct,
     excessReturnPct,
     grade: gradeExcessReturn(excessReturnPct),
+    isActive,
   };
 }

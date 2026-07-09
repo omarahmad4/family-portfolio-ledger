@@ -12,6 +12,7 @@ const nav = [
   ['Holdings', '/holdings'],
   ['Decisions', '/decisions'],
   ['Imports', '/imports'],
+  ['Settings', '/settings'],
 ];
 
 export default function RootLayout({ children }: { children: ReactNode }) {
