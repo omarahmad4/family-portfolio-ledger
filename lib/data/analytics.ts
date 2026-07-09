@@ -8,7 +8,8 @@ import type { PriceMap } from '@/lib/types/domain';
 import { prisma } from '@/lib/db/prisma';
 import { calculateTotalUnits } from '@/lib/accounting/pool';
 import type { TransactionInput } from '@/lib/accounting/pool';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
+const yahooFinance = new YahooFinance();
 
 export async function getPortfolioAnalytics() {
   const [owners, assets, transactions] = await Promise.all([
@@ -40,7 +41,23 @@ export async function getPortfolioAnalytics() {
 
   const usdAssetId = assets.find((a) => a.symbol === 'USD')?.id;
   const holdings = computeHoldings(transactions, prices, owners.map((o) => o.id), usdAssetId);
-  const ownerSummary = summarizeByOwner(holdings);
+
+  const partnerContributions: Record<string, number> = {};
+  for (const owner of owners) {
+    let contributed = 0;
+    for (const tx of transactions) {
+      if (tx.type === 'DEPOSIT') {
+        const alloc = tx.allocations.find((a) => a.ownerId === owner.id);
+        if (alloc) contributed += Number(alloc.amount);
+      } else if (tx.type === 'WITHDRAWAL') {
+        const alloc = tx.allocations.find((a) => a.ownerId === owner.id);
+        if (alloc) contributed -= Number(alloc.amount);
+      }
+    }
+    partnerContributions[owner.id] = contributed;
+  }
+
+  const ownerSummary = summarizeByOwner(holdings, partnerContributions);
   const lots = buildFifoLots(transactions);
 
   const assetById = new Map(assets.map((asset) => [asset.id, asset]));
@@ -179,12 +196,15 @@ export async function getPerformanceChartData(): Promise<any[]> {
         ) as any;
 
         if (result && result.length > 0) {
-          const priceData = result.map((p: any) => ({
-            assetId,
-            date: new Date(p.date.toISOString().slice(0, 10) + 'T00:00:00.000Z'),
-            close: Number(p.close ?? p.adjClose ?? 0),
-            source: 'yahoo-historical',
-          })).filter((p: any) => p.close > 0);
+          const priceData = result.map((p: any) => {
+            const dateObj = p.date instanceof Date ? p.date : new Date(p.date);
+            return {
+              assetId,
+              date: new Date(dateObj.toISOString().slice(0, 10) + 'T00:00:00.000Z'),
+              close: Number(p.close ?? p.adjClose ?? 0),
+              source: 'yahoo-historical',
+            };
+          }).filter((p: any) => p.close > 0);
 
           await prisma.price.createMany({
             data: priceData,

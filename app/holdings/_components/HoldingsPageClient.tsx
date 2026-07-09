@@ -136,6 +136,15 @@ export function HoldingsPageClient({
   performanceChartData,
 }: HoldingsPageClientProps) {
   const [viewMode, setViewMode] = useState<'partner' | 'portfolio'>('partner');
+  const [expandedOwners, setExpandedOwners] = useState<Record<string, boolean>>({});
+  
+  const toggleOwner = (ownerId: string) => {
+    setExpandedOwners((prev) => ({
+      ...prev,
+      [ownerId]: !prev[ownerId],
+    }));
+  };
+
   const assetById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
 
   // Aggregate holdings across all owners by assetId
@@ -290,17 +299,36 @@ export function HoldingsPageClient({
           const totalGain = ownerSummaryRow?.unrealizedGainLoss ?? 0;
           const totalPct = ownerSummaryRow?.unrealizedReturnPct ?? 0;
 
+          const isExpanded = !!expandedOwners[owner.id];
+
           return (
-            <section key={owner.id} data-testid="owner-section" className="card" style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '14px' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '20px', color: 'var(--text)', fontWeight: 700 }}>
-                    {owner.name}&apos;s Ledger Portfolio
-                  </h3>
-                  <span style={{ fontSize: '13px', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    Holds {number(unitsOwned)} pool units ({(netWorthShare * 100).toFixed(2)}% net worth share)
-                    <InfoTooltip text="Pool units represent your ownership shares of the pool. Net worth share is your percentage of total fund assets (units owned / total pool units). Unit value is calculated as NAVPU (Net Asset Value per Unit)." />
+            <section key={owner.id} data-testid="owner-section" className="card" style={{ marginBottom: 24, padding: '16px 20px' }}>
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+                onClick={() => toggleOwner(owner.id)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '18px', color: '#64748b', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                    ▶
                   </span>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--text)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {owner.name}&apos;s Ledger Portfolio
+                    </h3>
+                    <span 
+                      style={{ fontSize: '13px', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      onClick={(e) => e.stopPropagation()} // Keep tooltip click from toggling accordion
+                    >
+                      Holds {Number(unitsOwned).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })} pool units ({(netWorthShare * 100).toFixed(2)}% net worth share)
+                      <InfoTooltip text="Pool units represent your ownership shares of the pool. Net worth share is your percentage of total fund assets (units owned / total pool units). Unit value is calculated as NAVPU (Net Asset Value per Unit)." />
+                    </span>
+                  </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>
@@ -312,11 +340,15 @@ export function HoldingsPageClient({
                 </div>
               </div>
 
-              <OwnerHoldingsTable 
-                ownerHoldings={ownerHoldings} 
-                assetById={assetById} 
-                prices={prices} 
-              />
+              {isExpanded && (
+                <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                  <OwnerHoldingsTable 
+                    ownerHoldings={ownerHoldings} 
+                    assetById={assetById} 
+                    prices={prices} 
+                  />
+                </div>
+              )}
             </section>
           );
         })

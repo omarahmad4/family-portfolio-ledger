@@ -9,7 +9,17 @@
 import React, { useState } from 'react';
 import { money, number, pct } from '@/lib/format';
 import { useSortableData, SortableHeader } from '@/components/tables/SortableTable';
-import { Tooltip } from '@/components/Tooltip';
+import { Tooltip as InfoTooltip } from '@/components/Tooltip';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+} from 'recharts';
 
 interface DecisionsPageClientProps {
   initialDecisionRows: any[];
@@ -81,14 +91,95 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
     return 'F';
   };
 
+  const decisionChartData = React.useMemo(() => {
+    const chronological = [...filteredRows].sort((a, b) => new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime());
+    return chronological.map((row, idx, arr) => {
+      const alpha = (row.excessReturnPct ?? 0) * 100;
+      const startIdx = Math.max(0, idx - 4);
+      const windowRows = arr.slice(startIdx, idx + 1);
+      const rollingAvg = windowRows.reduce((sum, r) => sum + (r.excessReturnPct ?? 0), 0) / windowRows.length * 100;
+      return {
+        date: new Date(row.tradeDate).toLocaleDateString(undefined, { month: 'short', year: '2-digit', timeZone: 'UTC' }),
+        alpha,
+        rollingAvg,
+        symbol: row.symbol,
+      };
+    });
+  }, [filteredRows]);
+
   return (
     <>
+      {/* Decisions Quality Timeline Chart */}
+      <section className="card" style={{ marginBottom: 20 }}>
+        <h3 style={{ marginTop: 0, marginBottom: 6, display: 'flex', alignItems: 'center' }}>
+          Decision Quality Timeline
+          <InfoTooltip text="Plots the excess return (alpha) of each buy decision on its trade date. The rolling average line shows the smoothed quality trend of your investment decisions over time." />
+        </h3>
+        <p style={{ color: 'var(--muted)', fontSize: '13px', marginTop: 0, marginBottom: 20 }}>
+          Timeline of investment outperformance (Alpha) compared to S&P 500 (SPY).
+        </p>
+
+        {decisionChartData.length === 0 ? (
+          <div className="empty-state" style={{ textAlign: 'center', padding: '40px 0' }}>
+            No decisions available for the current filters.
+          </div>
+        ) : (
+          <div style={{ width: '100%', height: 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={decisionChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="#64748b" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                />
+                <YAxis 
+                  stroke="#64748b" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tickFormatter={(val) => `${val.toFixed(0)}%`} 
+                />
+                <RechartsTooltip 
+                  contentStyle={{ background: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} 
+                  labelStyle={{ fontWeight: 600, color: '#cbd5e1' }}
+                  formatter={(value: any, name: string) => {
+                    const label = name === 'alpha' ? 'Decision Alpha' : '5-Decision Rolling Avg';
+                    return [`${Number(value).toFixed(2)}%`, label];
+                  }}
+                />
+                <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: 13 }} />
+                <Line 
+                  type="monotone" 
+                  dataKey="alpha" 
+                  name="alpha" 
+                  stroke="#64748b" 
+                  strokeWidth={1} 
+                  dot={{ r: 3, stroke: '#64748b', strokeWidth: 1, fill: '#0f172a' }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="rollingAvg" 
+                  name="rollingAvg" 
+                  stroke="#10b981" 
+                  strokeWidth={2.5} 
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
       {/* Decision KPIs */}
       <section className="grid" style={{ marginBottom: 20 }}>
         <div className="card">
           <h3 style={{ display: 'flex', alignItems: 'center' }}>
             Average Portfolio Grade
-            <Tooltip text="The capital-weighted GPA of your buy decisions (A=4.00, B=3.00, C=2.00, D=1.00, F=0.00). Staged cost determines the weight." />
+            <InfoTooltip text="The capital-weighted GPA of your buy decisions (A=4.00, B=3.00, C=2.00, D=1.00, F=0.00). Staged cost determines the weight." />
           </h3>
           <div className="metric" style={{ color: avgGPA >= 2.5 ? '#10b981' : '#fde68a' }}>
             {avgGPA.toFixed(2)} / 4.00 <span style={{ fontSize: '18px', fontWeight: 500 }}>({getLetterGPA(avgGPA)})</span>
@@ -97,7 +188,7 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
         <div className="card">
           <h3 style={{ display: 'flex', alignItems: 'center' }}>
             Alpha Beat Rate
-            <Tooltip text="The percentage of your investment cohorts (or capital, if weighted) that outperformed the S&P 500 (SPY) benchmark index." />
+            <InfoTooltip text="The percentage of your investment cohorts (or capital, if weighted) that outperformed the S&P 500 (SPY) benchmark index." />
           </h3>
           <div className="metric" style={{ color: beatRate >= 0.5 ? '#10b981' : '#f59e0b' }}>
             {pct(beatRate)} <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 400 }}>of {weightMode === 'weighted' ? 'capital outperforms' : 'cohorts outperform'} SPY</span>
@@ -106,7 +197,7 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
         <div className="card">
           <h3 style={{ display: 'flex', alignItems: 'center' }}>
             Average Excess Return (Alpha)
-            <Tooltip text="The average percentage return of your investment cohorts minus the S&P 500's return over the same holding periods." />
+            <InfoTooltip text="The average percentage return of your investment cohorts minus the S&P 500's return over the same holding periods." />
           </h3>
           <div className={`metric ${overallAlpha >= 0 ? 'positive' : 'negative'}`}>
             {overallAlpha >= 0 ? '+' : ''}{pct(overallAlpha)}
