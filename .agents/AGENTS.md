@@ -52,5 +52,11 @@ We enforce a strict documentation policy to maintain code clarity and support AI
   - Execute pre-authorized command prefixes (such as `gh` or `git`) directly without path prepends (e.g., `$env:Path = ...`), as path prefixing breaks the pattern-matching override checks.
   - Group sequential commands in the same execution turn (such as adding, committing, pushing, and updating GitHub issues) into a single chained command line using `;` or `&&` so they require only one approval from the user.
 
+---
+
+## 8. GitHub Issue Tracking
+- **Rule**: All development tasks, features, refactors, and bug fixes MUST be tracked via a corresponding GitHub issue. Ensure that the issue exists before execution begins, and close or update the issue once complete.
+
+
 
 

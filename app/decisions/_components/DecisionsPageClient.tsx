@@ -16,6 +16,7 @@ interface DecisionsPageClientProps {
 
 export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClientProps) {
   const [hideReinvestments, setHideReinvestments] = useState(true);
+  const [weightMode, setWeightMode] = useState<'unweighted' | 'weighted'>('unweighted');
 
   // 1. Filter out dividend reinvestments if toggled
   const filteredRows = React.useMemo(() => {
@@ -31,14 +32,40 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
     order: 'desc'
   });
 
-  // Calculate live decision KPIs from current filtered selection
+  // Calculate live decision KPIs from current filtered selection (supports Value-Weighting)
   const totalDecisions = sortedRows.length;
-  const beatCount = sortedRows.filter((d: any) => d.excessReturnPct > 0).length;
-  const beatRate = totalDecisions > 0 ? beatCount / totalDecisions : 0.0;
-
   const gpaValues: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 };
-  const totalGPA = sortedRows.reduce((acc, r: any) => acc + (gpaValues[r.grade] ?? 0), 0);
-  const avgGPA = totalDecisions > 0 ? totalGPA / totalDecisions : 0.0;
+
+  let beatRate = 0.0;
+  let avgGPA = 0.0;
+  let overallAlpha = 0.0;
+
+  if (totalDecisions > 0) {
+    if (weightMode === 'weighted') {
+      const totalWeight = sortedRows.reduce((acc, r: any) => acc + Math.abs(r.grossAmount), 0);
+      if (totalWeight > 0) {
+        const beatWeightSum = sortedRows
+          .filter((d: any) => d.excessReturnPct > 0)
+          .reduce((acc, r: any) => acc + Math.abs(r.grossAmount), 0);
+        beatRate = beatWeightSum / totalWeight;
+
+        const weightedGPASum = sortedRows.reduce((acc, r: any) => acc + (gpaValues[r.grade] ?? 0) * Math.abs(r.grossAmount), 0);
+        avgGPA = weightedGPASum / totalWeight;
+
+        const weightedAlphaSum = sortedRows.reduce((acc, r: any) => acc + r.excessReturnPct * Math.abs(r.grossAmount), 0);
+        overallAlpha = weightedAlphaSum / totalWeight;
+      }
+    } else {
+      const beatCount = sortedRows.filter((d: any) => d.excessReturnPct > 0).length;
+      beatRate = beatCount / totalDecisions;
+
+      const totalGPA = sortedRows.reduce((acc, r: any) => acc + (gpaValues[r.grade] ?? 0), 0);
+      avgGPA = totalGPA / totalDecisions;
+
+      const alphaSum = sortedRows.reduce((acc, r: any) => acc + r.excessReturnPct, 0);
+      overallAlpha = alphaSum / totalDecisions;
+    }
+  }
 
   const getLetterGPA = (gpa: number) => {
     if (gpa >= 3.5) return 'A';
@@ -47,10 +74,6 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
     if (gpa >= 0.5) return 'D';
     return 'F';
   };
-
-  const overallAlpha = totalDecisions > 0 
-    ? sortedRows.reduce((acc, r: any) => acc + r.excessReturnPct, 0) / totalDecisions 
-    : 0.0;
 
   return (
     <>
@@ -65,7 +88,7 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
         <div className="card">
           <h3>Alpha Beat Rate</h3>
           <div className="metric" style={{ color: beatRate >= 0.5 ? '#10b981' : '#f59e0b' }}>
-            {pct(beatRate)} <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 400 }}>of cohorts outperform SPY</span>
+            {pct(beatRate)} <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 400 }}>of {weightMode === 'weighted' ? 'capital outperforms' : 'cohorts outperform'} SPY</span>
           </div>
         </div>
         <div className="card">
@@ -80,15 +103,29 @@ export function DecisionsPageClient({ initialDecisionRows }: DecisionsPageClient
       <section className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>Decision Scorecards</h3>
-          <label className="checkbox-row" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input 
-              type="checkbox" 
-              checked={hideReinvestments} 
-              onChange={(e) => setHideReinvestments(e.target.checked)} 
-              data-testid="toggle-reinvestments"
-            />
-            <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Hide Dividend Reinvestments</span>
-          </label>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Weighting:</span>
+              <select
+                value={weightMode}
+                onChange={(e) => setWeightMode(e.target.value as any)}
+                style={{ background: '#1e293b', color: '#cbd5e1', padding: '4px 8px', borderRadius: '6px', border: '1px solid #475569', fontSize: '13px', cursor: 'pointer' }}
+                data-testid="select-weighting"
+              >
+                <option value="unweighted">Unweighted</option>
+                <option value="weighted">Weighted by Value</option>
+              </select>
+            </div>
+            <label className="checkbox-row" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input 
+                type="checkbox" 
+                checked={hideReinvestments} 
+                onChange={(e) => setHideReinvestments(e.target.checked)} 
+                data-testid="toggle-reinvestments"
+              />
+              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Hide Dividend Reinvestments</span>
+            </label>
+          </div>
         </div>
 
         {sortedRows.length === 0 ? (

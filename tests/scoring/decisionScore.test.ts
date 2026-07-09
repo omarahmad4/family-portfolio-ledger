@@ -23,10 +23,11 @@ class MockProvider implements MarketDataProvider {
 
 describe('Decision Scoring Engine', () => {
   it('correctly grades excess returns based on threshold brackets', () => {
-    expect(gradeExcessReturn(0.25)).toBe('A');
-    expect(gradeExcessReturn(0.10)).toBe('B');
-    expect(gradeExcessReturn(0.00)).toBe('C');
-    expect(gradeExcessReturn(-0.10)).toBe('D');
+    expect(gradeExcessReturn(0.06)).toBe('A');
+    expect(gradeExcessReturn(0.02)).toBe('B');
+    expect(gradeExcessReturn(-0.02)).toBe('B');
+    expect(gradeExcessReturn(-0.10)).toBe('C');
+    expect(gradeExcessReturn(-0.20)).toBe('D');
     expect(gradeExcessReturn(-0.30)).toBe('F');
   });
 

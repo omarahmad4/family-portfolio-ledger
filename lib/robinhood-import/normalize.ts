@@ -98,8 +98,12 @@ export function normalizeRobinhoodRow(raw: unknown, options: NormalizeRobinhoodR
   const fee = Math.abs(money(get(row, ['Fee', 'Fees', 'Reg Fee'])));
 
   const description = get(row, ['Description']) || '';
-  const isReinvestment = description.toLowerCase().includes('reinvestment') || 
-                         (rawType ?? '').toLowerCase().includes('reinvestment');
+  const descLower = description.toLowerCase();
+  const rawTypeLower = (rawType ?? '').toLowerCase();
+  const isReinvestment = descLower.includes('reinvestment') || 
+                         rawTypeLower.includes('reinvestment') ||
+                         descLower.includes('bulk equity') ||
+                         descLower.includes('order allocation');
   const notes = isReinvestment ? 'Dividend Reinvestment' : undefined;
 
   if (!tradeDate) return null;

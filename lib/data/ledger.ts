@@ -58,10 +58,39 @@ export async function getLatestPrices(): Promise<PriceMap> {
 }
 
 export async function getHydratedTransactions() {
-  return prisma.transaction.findMany({
+  const transactions = await prisma.transaction.findMany({
     include: { account: true, asset: true, allocations: { include: { owner: true } } },
     orderBy: [{ tradeDate: 'desc' }, { createdAt: 'desc' }],
   });
+
+  return transactions.map((tx) => ({
+    id: tx.id,
+    accountId: tx.accountId,
+    assetId: tx.assetId,
+    type: tx.type,
+    tradeDate: tx.tradeDate,
+    quantity: tx.quantity == null ? null : toNumber(tx.quantity),
+    price: tx.price == null ? null : toNumber(tx.price),
+    grossAmount: toNumber(tx.grossAmount),
+    fee: toNumber(tx.fee),
+    notes: tx.notes,
+    externalId: tx.externalId,
+    importBatchId: tx.importBatchId,
+    createdAt: tx.createdAt,
+    updatedAt: tx.updatedAt,
+    account: tx.account,
+    asset: tx.asset,
+    allocations: tx.allocations.map((allocation) => ({
+      id: allocation.id,
+      transactionId: allocation.transactionId,
+      ownerId: allocation.ownerId,
+      percentage: toNumber(allocation.percentage),
+      amount: toNumber(allocation.amount),
+      quantity: allocation.quantity == null ? null : toNumber(allocation.quantity),
+      createdAt: allocation.createdAt,
+      owner: allocation.owner,
+    })),
+  }));
 }
 
 export async function getReferenceData() {

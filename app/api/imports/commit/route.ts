@@ -63,6 +63,23 @@ function toInputTx(tx: any, assetSymbol?: string): TransactionInput {
   };
 }
 
+interface StockSplitEvent {
+  symbol: string;
+  date: string;
+  ratio: number;
+}
+
+const HISTORICAL_SPLITS: StockSplitEvent[] = [
+  { symbol: 'NVDA', date: '2021-07-20', ratio: 4.0 },
+  { symbol: 'NVDA', date: '2024-06-10', ratio: 10.0 },
+  { symbol: 'GOOG', date: '2022-07-18', ratio: 20.0 },
+  { symbol: 'GOOGL', date: '2022-07-18', ratio: 20.0 },
+  { symbol: 'AMZN', date: '2022-06-06', ratio: 20.0 },
+  { symbol: 'TSLA', date: '2020-08-31', ratio: 5.0 },
+  { symbol: 'TSLA', date: '2022-08-25', ratio: 3.0 },
+  { symbol: 'AAPL', date: '2020-08-31', ratio: 4.0 },
+];
+
 /**
  * POST handler to commit normalized transactions.
  * 
@@ -115,10 +132,49 @@ export async function POST(request: Request) {
     // Maintain chronological running list of transactions for NAV calculation
     const runningTxs: TransactionInput[] = dbTransactions.map((tx) => toInputTx(tx, tx.asset?.symbol));
 
+    // Resolve date range of current import batch to inject any active historical splits
+    const importDates = input.transactions.map((tx) => new Date(tx.tradeDate).getTime());
+    const minImportTime = Math.min(...importDates);
+    const maxImportTime = Math.max(...importDates);
+
+    const transactionsToProcess = [...input.transactions];
+
+    for (const split of HISTORICAL_SPLITS) {
+      const splitTime = new Date(split.date).getTime();
+      if (splitTime >= minImportTime && splitTime <= maxImportTime) {
+        // Check if there are any purchases of the asset before the split date
+        const hasPriorBuy = dbTransactions.some((dtx) => dtx.asset?.symbol === split.symbol && dtx.tradeDate.getTime() < splitTime && (dtx.type === 'BUY' || dtx.type === 'TRANSFER_IN')) ||
+                            input.transactions.some((tx) => tx.assetSymbol === split.symbol && new Date(tx.tradeDate).getTime() < splitTime && (tx.type === 'BUY' || tx.type === 'TRANSFER_IN'));
+        
+        if (hasPriorBuy) {
+          const alreadyExists = dbTransactions.some((dtx) => dtx.asset?.symbol === split.symbol && dtx.type === 'SPLIT' && dtx.tradeDate.toISOString().slice(0, 10) === split.date) ||
+                                input.transactions.some((tx) => tx.assetSymbol === split.symbol && tx.type === 'SPLIT' && tx.tradeDate.slice(0, 10) === split.date);
+          
+          if (!alreadyExists) {
+            transactionsToProcess.push({
+              id: `auto-split:${split.symbol}:${split.date}`,
+              type: 'SPLIT',
+              tradeDate: new Date(split.date).toISOString(),
+              assetSymbol: split.symbol,
+              quantity: split.ratio,
+              price: 0,
+              grossAmount: 0,
+              fee: 0,
+              notes: `[AUTO] Historical Stock Split ${split.ratio}:1`,
+              allocations: [],
+            });
+          }
+        }
+      }
+    }
+
+    // Sort chronologically so splits are applied sequentially
+    transactionsToProcess.sort((a, b) => new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime());
+
     const toCommit: any[] = [];
     let skippedCount = 0;
 
-    for (const tx of input.transactions) {
+    for (const tx of transactionsToProcess) {
       // 1. Resolve or create Asset
       let resolvedAssetId = tx.assetId;
       if (tx.assetSymbol && !resolvedAssetId) {
@@ -241,12 +297,19 @@ export async function POST(request: Request) {
           },
         ];
       } else {
-        allocations = tx.allocations.map((a: any) => ({
-          ownerId: a.ownerId,
-          percentage: a.percentage,
-          amount: a.amount,
-          quantity: a.quantity ?? (resolvedQuantity != null ? resolvedQuantity * a.percentage : null),
-        }));
+        const ownerIds = owners.map((o) => o.id);
+        const shares = getOwnerShares(priorTxs, ownerIds);
+        const totalPct = Object.values(shares).reduce((sum, p) => sum + p, 0);
+
+        allocations = owners.map((owner) => {
+          const percentage = totalPct <= 1e-9 ? (1 / owners.length) : (shares[owner.id] ?? 0.0);
+          return {
+            ownerId: owner.id,
+            percentage,
+            amount: tx.grossAmount * percentage,
+            quantity: resolvedQuantity != null ? resolvedQuantity * percentage : null,
+          };
+        });
       }
 
       const finalizedTx = {

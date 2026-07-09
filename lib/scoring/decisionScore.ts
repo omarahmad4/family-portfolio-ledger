@@ -30,11 +30,11 @@ function pct(current: number, initial: number): number {
  * Assigns a grade based on the excess return percentage (alpha) relative to the benchmark.
  */
 export function gradeExcessReturn(excessReturnPct: number): DecisionGrade {
-  if (excessReturnPct >= 0.20) return 'A';   // Beat benchmark by >= 20%
-  if (excessReturnPct >= 0.05) return 'B';   // Beat benchmark by 5% to 20%
-  if (excessReturnPct >= -0.05) return 'C';  // Aligned with benchmark within +/- 5%
-  if (excessReturnPct >= -0.20) return 'D';  // Underperformed benchmark by 5% to 20%
-  return 'F';                               // Underperformed by > 20%
+  if (excessReturnPct > 0.05) return 'A';                  // Beats S&P 500 by > 5%
+  if (excessReturnPct >= -0.05 && excessReturnPct <= 0.05) return 'B'; // Aligned within +/- 5%
+  if (excessReturnPct >= -0.15) return 'C';                // Underperforms by 5% to 15%
+  if (excessReturnPct >= -0.25) return 'D';                // Underperforms by 15% to 25%
+  return 'F';                                              // Underperforms by > 25%
 }
 
 /**
